@@ -36,8 +36,10 @@ last = [None]*32
 cb = []
 
 def cbf(GPIO, level, tick):
-    print("G={} l={} d={}".format(GPIO, level, ""))
-
+    #print("G={} l={}".format(GPIO, level))
+    for section in config.keys(): 
+      if config[section]['gpio_pin'].isdigit() and int(config[section]['gpio_pin']) == GPIO:
+          logger.debug('gpio_pin = ' + str(GPIO )+ ' Section "' + section + '"')
 
 def main():
   global ws281xLedCount
@@ -48,14 +50,22 @@ def main():
   # initialize CTRL-C Exit handler
   signal.signal(signal.SIGINT, signal_handler)
 
+  
   # and determine maximum LED position
   ws281xLedCount = 0
+  buttonPins = []
+
   for section in config.keys():
     maxTemp = int(config[section]['led_start']) + int(config[section]['led_length'])
     logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281xLedCount = " + str(ws281xLedCount-1) )
     if maxTemp > ws281xLedCount:
       ws281xLedCount = maxTemp
+    if config[section]['gpio_pin'].isdigit():
+      buttonPins.append(int(config[section]['gpio_pin']))
+    
   logger.debug("Max LED position found to be " + str(ws281xLedCount - 1))
+  buttonPins = list(set(buttonPins))
+  logger.debug("list of pins = " + pp.pformat(buttonPins))
 
   #### POST - Neopixel Pre Operating Self Tests ####
   logger.debug("initializing ws2812svr")
@@ -79,12 +89,11 @@ def main():
      exit()
 
      
-  G = [21, 20, 16, 12, 7 , 8 , 25, 24, 23, 18]
-  for g in G:
-     pi.set_mode(g, pigpio.INPUT)
-     pi.set_pull_up_down(g, pigpio.PUD_UP)
-     pi.set_glitch_filter(g, 100)
-     cb.append(pi.callback(g, pigpio.FALLING_EDGE, cbf))
+  for buttonPin in buttonPins:
+     pi.set_mode(buttonPin, pigpio.INPUT)
+     pi.set_pull_up_down(buttonPin, pigpio.PUD_UP)
+     pi.set_glitch_filter(buttonPin, 100)
+     cb.append(pi.callback(buttonPin, pigpio.FALLING_EDGE, cbf))
 
   #### Main Loop
   try:
