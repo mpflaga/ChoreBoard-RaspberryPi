@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # python standard libraries
-import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy
+import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy, inspect
 
 # Raspberry Pi specific libraries
 import pigpio
@@ -35,25 +35,31 @@ config = None
 last = [None]*32
 cb = []
 
-def cbf(GPIO, level, tick):
+def cbf_pressed(GPIO, level, tick):
     for section in config.keys(): 
       if config[section]['gpio_pin'].isdigit() and int(config[section]['gpio_pin']) == GPIO:
-          logger.debug('gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
+          logger.debug('function = ' + str(inspect.stack()[0][3]) + ' gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
 
           logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281xLedCount = " + str(ws281xLedCount-1) )
           
-          if level == 0:
-            write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
-                         colors['wht']  + ',' + \
-                         str(config[section]['led_start']) + ',' + \
-                         str(int(config[section]['led_length'])) + \
-                         '\nrender\n')
-          else:
-            write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
-                         colors['off']  + ',' + \
-                         str(config[section]['led_start']) + ',' + \
-                         str(int(config[section]['led_length'])) + \
-                         '\nrender\n')                      
+          write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+                       colors['wht']  + ',' + \
+                       str(config[section]['led_start']) + ',' + \
+                       str(int(config[section]['led_length'])) + \
+                       '\nrender\n')
+
+def cbf_released(GPIO, level, tick):
+    for section in config.keys(): 
+      if config[section]['gpio_pin'].isdigit() and int(config[section]['gpio_pin']) == GPIO:
+          logger.debug('function = ' + str(inspect.stack()[0][3]) + ' gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
+
+          logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281xLedCount = " + str(ws281xLedCount-1) )
+          
+          write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+                       colors['off']  + ',' + \
+                       str(config[section]['led_start']) + ',' + \
+                       str(int(config[section]['led_length'])) + \
+                       '\nrender\n')                      
 
 def main():
   global ws281xLedCount
@@ -119,7 +125,8 @@ def main():
      pi.set_mode(buttonPin, pigpio.INPUT)
      pi.set_pull_up_down(buttonPin, pigpio.PUD_UP)
      pi.set_glitch_filter(buttonPin, 100)
-     cb.append(pi.callback(buttonPin, pigpio.EITHER_EDGE, cbf))
+     cb.append(pi.callback(buttonPin, pigpio.FALLING_EDGE, cbf_pressed))
+     cb.append(pi.callback(buttonPin, pigpio.RISING_EDGE, cbf_released))
 
   #### Main Loop
   try:
