@@ -36,10 +36,24 @@ last = [None]*32
 cb = []
 
 def cbf(GPIO, level, tick):
-    #print("G={} l={}".format(GPIO, level))
     for section in config.keys(): 
       if config[section]['gpio_pin'].isdigit() and int(config[section]['gpio_pin']) == GPIO:
-          logger.debug('gpio_pin = ' + str(GPIO )+ ' Section "' + section + '"')
+          logger.debug('gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
+
+          logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281xLedCount = " + str(ws281xLedCount-1) )
+          
+          if level == 0:
+            write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+                         colors['wht']  + ',' + \
+                         str(config[section]['led_start']) + ',' + \
+                         str(int(config[section]['led_length'])) + \
+                         '\nrender\n')
+          else:
+            write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+                         colors['off']  + ',' + \
+                         str(config[section]['led_start']) + ',' + \
+                         str(int(config[section]['led_length'])) + \
+                         '\nrender\n')                      
 
 def main():
   global ws281xLedCount
@@ -74,7 +88,19 @@ def main():
     logger.debug("POST LED test of ALL " + colorName)
     write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + colors[colorName] + '\nrender\n')
     time.sleep(args.postDelay)
-
+    
+  write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+               colors['wht']  + ',' + \
+               str(config['Title 0']['led_start']) + ',' + \
+               str(int(config['Title 0']['led_length'])) + \
+               '\nrender\n')
+  time.sleep(args.postDelay)
+  write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+               colors['off']  + ',' + \
+               str(config['Title 0']['led_start']) + ',' + \
+               str(int(config['Title 0']['led_length'])) + \
+               '\nrender\n') 
+               
   #### used to locate LEDs on device
   if args.walkLED:
     walk_leds()
@@ -93,7 +119,7 @@ def main():
      pi.set_mode(buttonPin, pigpio.INPUT)
      pi.set_pull_up_down(buttonPin, pigpio.PUD_UP)
      pi.set_glitch_filter(buttonPin, 100)
-     cb.append(pi.callback(buttonPin, pigpio.FALLING_EDGE, cbf))
+     cb.append(pi.callback(buttonPin, pigpio.EITHER_EDGE, cbf))
 
   #### Main Loop
   try:
