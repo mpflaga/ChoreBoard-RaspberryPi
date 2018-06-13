@@ -10,12 +10,13 @@ import pigpio
 #### Global Variables ####
 
 # ws2812svr constants
-ws281xPWMchannel = 2
-ws281xNeopixelPin = 13
-ws281xBrightness = 255/2
-ws281xInvert = 0
-ws281xLedCount = 0 # will be calculated later, from the INI file
-ws281xLedType = 1
+ws281x = { 'PWMchannel' : 2,
+           'NeopixelPin' : 13,
+           'Brightness' : 255/2,
+           'Invert' : 0,
+           'LedCount' : 0, # will be calculated later, from the INI file
+           'LedType' : 1
+         }
 
 colors = { 'off' : '000000',
            'red' : 'FF0000',
@@ -38,9 +39,9 @@ def cbf_pressed(GPIO, level, tick):
       if config[section]['gpio_pin'].isdigit() and int(config[section]['gpio_pin']) == GPIO:
           logger.debug('function = ' + str(inspect.stack()[0][3]) + ' gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
 
-          logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281xLedCount = " + str(ws281xLedCount-1) )
+          logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1) )
           
-          write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+          write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                        colors['wht']  + ',' + \
                        str(config[section]['led_start']) + ',' + \
                        str(int(config[section]['led_length'])) + \
@@ -51,9 +52,9 @@ def cbf_released(GPIO, level, tick):
       if config[section]['gpio_pin'].isdigit() and int(config[section]['gpio_pin']) == GPIO:
           logger.debug('function = ' + str(inspect.stack()[0][3]) + ' gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
 
-          logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281xLedCount = " + str(ws281xLedCount-1) )
+          logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1) )
           
-          write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+          write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                        colors['off']  + ',' + \
                        str(config[section]['led_start']) + ',' + \
                        str(int(config[section]['led_length'])) + \
@@ -61,7 +62,7 @@ def cbf_released(GPIO, level, tick):
           logger.debug('begin = ' + config[section]['deadline'])
 
 def main():
-  global ws281xLedCount
+  global ws281x
   
   ParseArgs()
   setupLogging()
@@ -71,7 +72,7 @@ def main():
 
   
   # and determine maximum LED position
-  ws281xLedCount = 0
+  ws281x['LedCount'] = 0
   buttonPins = []
 
   for section in config.keys():
@@ -80,33 +81,33 @@ def main():
                  ", led_start = " + config[section]['led_start'] + \
                  ", gpio_pin = " + config[section]['gpio_pin'] + \
                  ", led_length = " + config[section]['led_length'] + \
-                 ", ws281xLedCount = " + str(ws281xLedCount-1) + \
+                 ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1) + \
                  ', deadline = "' + config[section]['deadline'] + '"' \
                  )
-    if maxTemp > ws281xLedCount:
-      ws281xLedCount = maxTemp
+    if maxTemp > ws281x['LedCount']:
+      ws281x['LedCount'] = maxTemp
     if config[section]['gpio_pin'].isdigit():
       buttonPins.append(int(config[section]['gpio_pin']))
     
-  logger.debug("Max LED position found to be " + str(ws281xLedCount - 1))
+  logger.debug("Max LED position found to be " + str(ws281x['LedCount'] - 1))
   buttonPins = list(set(buttonPins))
   logger.debug("list of pins = " + pp.pformat(buttonPins))
 
   #### POST - Neopixel Pre Operating Self Tests ####
   logger.debug("initializing ws2812svr")
-  write_ws281x('setup {0},{1},{2},{3},{4},{5}\ninit\n'.format(ws281xPWMchannel, ws281xLedCount, ws281xLedType, ws281xInvert, ws281xBrightness, ws281xNeopixelPin))
+  write_ws281x('setup {0},{1},{2},{3},{4},{5}\ninit\n'.format(ws281x['PWMchannel'], ws281x['LedCount'], ws281x['LedType'], ws281x['Invert'], ws281x['Brightness'], ws281x['NeopixelPin']))
   for colorName in ['red', 'grn', 'blu', 'off']:
     logger.debug("POST LED test of ALL " + colorName)
-    write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + colors[colorName] + '\nrender\n')
+    write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[colorName] + '\nrender\n')
     time.sleep(args.postDelay)
     
-  write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+  write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                colors['wht']  + ',' + \
                str(config['Title 0']['led_start']) + ',' + \
                str(int(config['Title 0']['led_length'])) + \
                '\nrender\n')
   time.sleep(args.postDelay)
-  write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+  write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                colors['off']  + ',' + \
                str(config['Title 0']['led_start']) + ',' + \
                str(int(config['Title 0']['led_length'])) + \
@@ -146,9 +147,9 @@ def main():
 #end of main():
 
 def walk_leds():
-  global ws281xLedCount
-  for pos in range(ws281xLedCount):
-    write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + \
+  global ws281x
+  for pos in range(ws281x['LedCount']):
+    write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                            colors['red']  + ',' + \
                            str(pos) + ',' + \
                            '1' + \
@@ -160,7 +161,7 @@ def walk_leds():
     except SyntaxError:
         pass
     
-    write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + colors['off'] + '\nrender\n')
+    write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors['off'] + '\nrender\n')
     pos = pos + 1
   exit()
 
@@ -276,7 +277,7 @@ def write_ws281x(cmd):
 def signal_handler(signal, frame):
   # handle ctrl+c gracefully
   logger.info("CTRL+C Exit LED test of ALL off")
-  write_ws281x('fill ' + str(ws281xPWMchannel) + ',' + colors['off'] + '\nrender\n')
+  write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors['off'] + '\nrender\n')
 
   logger.info('Exiting script ' + os.path.join(os.path.dirname(os.path.realpath(__file__)), __file__))
 
