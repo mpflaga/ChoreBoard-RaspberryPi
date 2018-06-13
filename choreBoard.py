@@ -32,8 +32,6 @@ fn = os.path.splitext(os.path.basename(__main__.__file__))[0]
 args = None
 config = None
 
-last = [None]*32
-cb = []
 
 def cbf_pressed(GPIO, level, tick):
     for section in config.keys(): 
@@ -60,6 +58,7 @@ def cbf_released(GPIO, level, tick):
                        str(config[section]['led_start']) + ',' + \
                        str(int(config[section]['led_length'])) + \
                        '\nrender\n')                      
+          logger.debug('begin = ' + config[section]['deadline'])
 
 def main():
   global ws281xLedCount
@@ -77,7 +76,13 @@ def main():
 
   for section in config.keys():
     maxTemp = int(config[section]['led_start']) + int(config[section]['led_length'])
-    logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281xLedCount = " + str(ws281xLedCount-1) )
+    logger.debug("section = " + section + \
+                 ", led_start = " + config[section]['led_start'] + \
+                 ", gpio_pin = " + config[section]['gpio_pin'] + \
+                 ", led_length = " + config[section]['led_length'] + \
+                 ", ws281xLedCount = " + str(ws281xLedCount-1) + \
+                 ', deadline = "' + config[section]['deadline'] + '"' \
+                 )
     if maxTemp > ws281xLedCount:
       ws281xLedCount = maxTemp
     if config[section]['gpio_pin'].isdigit():
@@ -120,7 +125,7 @@ def main():
   if not pi.connected:
      exit()
 
-     
+  cb = []
   for buttonPin in buttonPins:
      pi.set_mode(buttonPin, pigpio.INPUT)
      pi.set_pull_up_down(buttonPin, pigpio.PUD_UP)
