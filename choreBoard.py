@@ -50,15 +50,16 @@ def cbf_pressed(GPIO, level, tick):
                        '\nrender\n')
 
 def cbf_released(GPIO, level, tick):
-    current_seconds = time()
+    currentEpochSeconds = round(time())
     for section in tasks.keys():
       if int(tasks[section]['gpio_pin']) == GPIO:
           logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', Section "' + section + '"')
-          logger.debug('CurrentDate/nextDeadlineDate(sec) = ' + str(mktime(tasks[section]['nextDeadlineDate'])) + "/" + str(current_seconds))
+          logger.debug('CurrentDate/nextDeadlineDate(sec) = ' + str(mktime(tasks[section]['nextDeadlineDate'])) + "/" + str(currentEpochSeconds))
+          logger.debug('proposed nextTime = ' + str(tasks[section]['crontab'].next(datetime.fromtimestamp(currentEpochSeconds), default_utc=True) + currentEpochSeconds))
 
-          if current_seconds > mktime(tasks[section]['nextGraceDate']): # when in window of it being due.
-            # task was completed
-            nextTime = tasks[section]['crontab'].next(datetime.now(), default_utc=True) + time()
+          if currentEpochSeconds > mktime(tasks[section]['nextGraceDate']): # when in window of it being due.
+            # task was completed, so calc next time deadlines and set green.
+            nextTime = tasks[section]['crontab'].next(datetime.fromtimestamp(currentEpochSeconds), default_utc=True) + currentEpochSeconds
             tasks[section]['nextDeadlineDate'] = localtime(nextTime)
             tasks[section]['nextGraceDate'] = localtime(nextTime - int(tasks[section]['grace']))
             tasks[section]['currentColor'] = 'green'
@@ -89,6 +90,7 @@ def main():
   buttonPins = []
   tasks = {}
 
+  currentEpochSeconds = round(time())
   for section in config.keys():
     maxTemp = int(config[section]['led_start']) + int(config[section]['led_length'])
     logger.debug("section = " + section + \
@@ -104,7 +106,7 @@ def main():
       buttonPins.append(int(config[section]['gpio_pin']))
       tasks[section] = config[section]
       tasks[section]['crontab'] = CronTab(tasks[section]['deadline'])
-      nextTime = tasks[section]['crontab'].next(datetime.now(), default_utc=True) + time()
+      nextTime = tasks[section]['crontab'].next(datetime.fromtimestamp(currentEpochSeconds), default_utc=True) + currentEpochSeconds
       tasks[section]['nextDeadlineDate'] = localtime(nextTime)
       tasks[section]['nextGraceDate'] = localtime(nextTime - int(tasks[section]['grace']))
       tasks[section]['currentColor'] = 'off'
