@@ -2,6 +2,9 @@
 
 # python standard libraries
 import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy, inspect
+from crontab import CronTab
+from datetime import datetime
+from time import time, sleep, localtime, tzset
 
 # Raspberry Pi specific libraries
 import pigpio
@@ -74,6 +77,7 @@ def main():
   # and determine maximum LED position
   ws281x['LedCount'] = 0
   buttonPins = []
+  tasks = {}
 
   for section in config.keys():
     maxTemp = int(config[section]['led_start']) + int(config[section]['led_length'])
@@ -88,7 +92,15 @@ def main():
       ws281x['LedCount'] = maxTemp
     if config[section]['gpio_pin'].isdigit():
       buttonPins.append(int(config[section]['gpio_pin']))
-    
+      tasks[section] = config[section]
+      tasks[section]['crontab'] = CronTab(tasks[section]['deadline'])
+      nextTime = tasks[section]['crontab'].next(datetime.now(), default_utc=True) + time()
+      tasks[section]['nextDeadlineDate'] = localtime(nextTime)
+      tasks[section]['nextGraceDate'] = localtime(nextTime - int(tasks[section]['grace']))
+
+  logger.log(logging.DEBUG-4, "list of tasks = \r\n" + pp.pformat(list(tasks.keys())))
+  logger.log(logging.DEBUG-5, "tasks = \r\n" + pp.pformat(tasks))
+      
   logger.debug("Max LED position found to be " + str(ws281x['LedCount'] - 1))
   buttonPins = list(set(buttonPins))
   logger.debug("list of pins = " + pp.pformat(buttonPins))
@@ -99,14 +111,14 @@ def main():
   for colorName in ['red', 'grn', 'blu', 'off']:
     logger.debug("POST LED test of ALL " + colorName)
     write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[colorName] + '\nrender\n')
-    time.sleep(args.postDelay)
+    sleep(args.postDelay)
     
   write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                colors['wht']  + ',' + \
                str(config['Title 0']['led_start']) + ',' + \
                str(int(config['Title 0']['led_length'])) + \
                '\nrender\n')
-  time.sleep(args.postDelay)
+  sleep(args.postDelay)
   write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                colors['off']  + ',' + \
                str(config['Title 0']['led_start']) + ',' + \
@@ -137,7 +149,7 @@ def main():
   #### Main Loop
   try:
      while True:
-        time.sleep(60)
+        sleep(60)
   except KeyboardInterrupt:
      print("\nTidying up")
      for c in cb:
