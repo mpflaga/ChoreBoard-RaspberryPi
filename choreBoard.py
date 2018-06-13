@@ -4,7 +4,7 @@
 import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy, inspect
 from crontab import CronTab
 from datetime import datetime
-from time import time, sleep, localtime, tzset
+from time import time, sleep, localtime, mktime
 
 # Raspberry Pi specific libraries
 import pigpio
@@ -30,43 +30,45 @@ colors = { 'off' : '000000',
            'prp' : 'B54A8F',
            'wht' : 'FFFFFF'
          }
-
-         
-tasks = {}
-
          
 pp = pprint.PrettyPrinter(indent=4) # Setup format for pprint.
 fn = os.path.splitext(os.path.basename(__main__.__file__))[0]
 args = None
 config = None
+tasks = None
 
 
 def cbf_pressed(GPIO, level, tick):
-    for section in config.keys(): 
-      if config[section]['gpio_pin'].isdigit() and int(config[section]['gpio_pin']) == GPIO:
+    for section in tasks.keys(): 
+      if int(tasks[section]['gpio_pin']) == GPIO:
           logger.debug('function = ' + str(inspect.stack()[0][3]) + ' gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
 
-          logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1) )
+          logger.debug("section = " + section + ", led_start = " + tasks[section]['led_start'] + ", gpio_pin = " + tasks[section]['gpio_pin'] + ", led_length = " + tasks[section]['led_length'] + ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1) )
           
           write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                        colors['wht']  + ',' + \
-                       str(config[section]['led_start']) + ',' + \
-                       str(int(config[section]['led_length'])) + \
+                       str(tasks[section]['led_start']) + ',' + \
+                       str(int(tasks[section]['led_length'])) + \
                        '\nrender\n')
 
 def cbf_released(GPIO, level, tick):
-    for section in config.keys(): 
-      if config[section]['gpio_pin'].isdigit() and int(config[section]['gpio_pin']) == GPIO:
+    current_seconds = time()
+    for section in tasks.keys(): 
+      if int(tasks[section]['gpio_pin']) == GPIO:
           logger.debug('function = ' + str(inspect.stack()[0][3]) + ' gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
-
-          logger.debug("section = " + section + ", led_start = " + config[section]['led_start'] + ", gpio_pin = " + config[section]['gpio_pin'] + ", led_length = " + config[section]['led_length'] + ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1) )
+          logger.debug('CurrentDate/nextDeadlineDate(sec) = ' + str(mktime(tasks[section]['nextDeadlineDate'])) + "/" + str(current_seconds))
           
+          if current_seconds > mktime(tasks[section]['nextGraceDate']): # when in window of it being due.
+            newColor = colors['green'] # task was completed
+          else:
+            newColor = colors[tasks[section]['currentColor']] # not completed return to what it was prior to pressed/white
+
+          logger.log(logging.DEBUG-2, "section = " + section + ", led_start = " + tasks[section]['led_start'] + ", gpio_pin = " + tasks[section]['gpio_pin'] + ", led_length = " + tasks[section]['led_length'] + ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1) )
           write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
-                       colors['off']  + ',' + \
-                       str(config[section]['led_start']) + ',' + \
-                       str(int(config[section]['led_length'])) + \
+                       newColor  + ',' + \
+                       str(tasks[section]['led_start']) + ',' + \
+                       str(int(tasks[section]['led_length'])) + \
                        '\nrender\n')                      
-          logger.debug('begin = ' + config[section]['deadline'])
 
 def main():
   global ws281x
@@ -102,6 +104,7 @@ def main():
       nextTime = tasks[section]['crontab'].next(datetime.now(), default_utc=True) + time()
       tasks[section]['nextDeadlineDate'] = localtime(nextTime)
       tasks[section]['nextGraceDate'] = localtime(nextTime - int(tasks[section]['grace']))
+      tasks[section]['currentColor'] = 'off'
 
   logger.log(logging.DEBUG-4, "list of tasks = \r\n" + pp.pformat(list(tasks.keys())))
   logger.log(logging.DEBUG-5, "tasks = \r\n" + pp.pformat(tasks))
@@ -154,7 +157,7 @@ def main():
   #### Main Loop
   try:
      while True:
-        sleep(60)
+        sleep(60) # need to replace with Check if Task timed out either Yellow or Red.
   except KeyboardInterrupt:
      print("\nTidying up")
      for c in cb:
@@ -285,7 +288,7 @@ def setupLogging():
 
 def write_ws281x(cmd):
   with open(args.ws281x, 'w') as the_file:
-    logger.debug("ws281x cmd: " + cmd.replace("\n", "\\n"))
+    logger.log(logging.DEBUG-1, "ws281x cmd: " + cmd.replace("\n", "\\n"))
     the_file.write(cmd)
     # file closes with unindent.
     # close needed for ws2812svr to process file handle
