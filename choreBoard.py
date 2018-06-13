@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # python standard libraries
-import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy, inspect
+import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy
 from crontab import CronTab
 from datetime import datetime
 from time import time, sleep, localtime, mktime
@@ -30,7 +30,7 @@ colors = { 'off' : '000000',
            'prp' : 'B54A8F',
            'wht' : 'FFFFFF'
          }
-         
+
 pp = pprint.PrettyPrinter(indent=4) # Setup format for pprint.
 fn = os.path.splitext(os.path.basename(__main__.__file__))[0]
 args = None
@@ -39,12 +39,10 @@ tasks = None
 
 
 def cbf_pressed(GPIO, level, tick):
-    for section in tasks.keys(): 
+    for section in tasks.keys():
       if int(tasks[section]['gpio_pin']) == GPIO:
-          logger.debug('function = ' + str(inspect.stack()[0][3]) + ' gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
+          logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', Section "' + section + '"')
 
-          logger.debug("section = " + section + ", led_start = " + tasks[section]['led_start'] + ", gpio_pin = " + tasks[section]['gpio_pin'] + ", led_length = " + tasks[section]['led_length'] + ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1) )
-          
           write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                        colors['wht']  + ',' + \
                        str(tasks[section]['led_start']) + ',' + \
@@ -53,22 +51,27 @@ def cbf_pressed(GPIO, level, tick):
 
 def cbf_released(GPIO, level, tick):
     current_seconds = time()
-    for section in tasks.keys(): 
+    for section in tasks.keys():
       if int(tasks[section]['gpio_pin']) == GPIO:
-          logger.debug('function = ' + str(inspect.stack()[0][3]) + ' gpio_pin = ' + str(GPIO ) + ' level = ' + str(level ) + ' Section "' + section + '"')
+          logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', Section "' + section + '"')
           logger.debug('CurrentDate/nextDeadlineDate(sec) = ' + str(mktime(tasks[section]['nextDeadlineDate'])) + "/" + str(current_seconds))
-          
+
           if current_seconds > mktime(tasks[section]['nextGraceDate']): # when in window of it being due.
-            newColor = colors['green'] # task was completed
+            # task was completed
+            nextTime = tasks[section]['crontab'].next(datetime.now(), default_utc=True) + time()
+            tasks[section]['nextDeadlineDate'] = localtime(nextTime)
+            tasks[section]['nextGraceDate'] = localtime(nextTime - int(tasks[section]['grace']))
+            tasks[section]['currentColor'] = 'green'
+            
           else:
+            # task was not completed or pending, so restore
             newColor = colors[tasks[section]['currentColor']] # not completed return to what it was prior to pressed/white
 
-          logger.log(logging.DEBUG-2, "section = " + section + ", led_start = " + tasks[section]['led_start'] + ", gpio_pin = " + tasks[section]['gpio_pin'] + ", led_length = " + tasks[section]['led_length'] + ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1) )
           write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
-                       newColor  + ',' + \
+                       colors[tasks[section]['currentColor']]  + ',' + \
                        str(tasks[section]['led_start']) + ',' + \
                        str(int(tasks[section]['led_length'])) + \
-                       '\nrender\n')                      
+                       '\nrender\n')
 
 def main():
   global ws281x
@@ -76,11 +79,11 @@ def main():
 
   ParseArgs()
   setupLogging()
-  
+
   # initialize CTRL-C Exit handler
   signal.signal(signal.SIGINT, signal_handler)
 
-  
+
   # and determine maximum LED position
   ws281x['LedCount'] = 0
   buttonPins = []
@@ -108,7 +111,7 @@ def main():
 
   logger.log(logging.DEBUG-4, "list of tasks = \r\n" + pp.pformat(list(tasks.keys())))
   logger.log(logging.DEBUG-5, "tasks = \r\n" + pp.pformat(tasks))
-      
+
   logger.debug("Max LED position found to be " + str(ws281x['LedCount'] - 1))
   buttonPins = list(set(buttonPins))
   logger.debug("list of pins = " + pp.pformat(buttonPins))
@@ -120,7 +123,7 @@ def main():
     logger.debug("POST LED test of ALL " + colorName)
     write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[colorName] + '\nrender\n')
     sleep(args.postDelay)
-    
+
   write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                colors['wht']  + ',' + \
                str(config['Title 0']['led_start']) + ',' + \
@@ -131,12 +134,12 @@ def main():
                colors['off']  + ',' + \
                str(config['Title 0']['led_start']) + ',' + \
                str(int(config['Title 0']['led_length'])) + \
-               '\nrender\n') 
-               
+               '\nrender\n')
+
   #### used to locate LEDs on device
   if args.walkLED:
     walk_leds()
-  
+
   #### stop if command line requested.
   if args.stop :
     logger.info('Option set to just initialize and then quit')
@@ -157,7 +160,7 @@ def main():
   #### Main Loop
   try:
      while True:
-        sleep(60) # need to replace with Check if Task timed out either Yellow or Red.
+        sleep(60) # WIP/NEXT - MPF need to replace with Check if Task timed out either Yellow or Red.
   except KeyboardInterrupt:
      print("\nTidying up")
      for c in cb:
@@ -180,7 +183,7 @@ def walk_leds():
         eval(input("Press enter to continue"))
     except SyntaxError:
         pass
-    
+
     write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors['off'] + '\nrender\n')
     pos = pos + 1
   exit()
@@ -189,7 +192,7 @@ def ParseArgs():
   global args
   global config
   global fn
-  
+
   # Get filename of running script without path and or extension.
 
   # Define command line arguments
@@ -219,9 +222,9 @@ def setupLogging():
   global config
   global fn
   global logger
-  
+
   # Setup display and file logging with level support.
-  logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+  logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s] (%(funcName)s) %(message)s")
   logger = logging.getLogger()
   fileHandler = logging.handlers.RotatingFileHandler("{0}/{1}.log".format('/var/log/'+ fn +'/', fn), maxBytes=2*1024*1024, backupCount=2)
 
@@ -288,7 +291,7 @@ def setupLogging():
 
 def write_ws281x(cmd):
   with open(args.ws281x, 'w') as the_file:
-    logger.log(logging.DEBUG-1, "ws281x cmd: " + cmd.replace("\n", "\\n"))
+    logger.log(logging.DEBUG-1, cmd.replace("\n", "\\n"))
     the_file.write(cmd)
     # file closes with unindent.
     # close needed for ws2812svr to process file handle
