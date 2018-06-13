@@ -31,6 +31,10 @@ colors = { 'off' : '000000',
            'wht' : 'FFFFFF'
          }
 
+         
+tasks = {}
+
+         
 pp = pprint.PrettyPrinter(indent=4) # Setup format for pprint.
 fn = os.path.splitext(os.path.basename(__main__.__file__))[0]
 args = None
@@ -66,7 +70,8 @@ def cbf_released(GPIO, level, tick):
 
 def main():
   global ws281x
-  
+  global tasks
+
   ParseArgs()
   setupLogging()
   
