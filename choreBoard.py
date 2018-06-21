@@ -3,7 +3,7 @@
 # python standard libraries
 import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy
 from crontab import CronTab
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import time, sleep, localtime, mktime
 
 # Raspberry Pi specific libraries
@@ -50,15 +50,19 @@ def cbf_pressed(GPIO, level, tick):
                        '\nrender\n')
 
 def cbf_released(GPIO, level, tick):
-    currentEpochSeconds = round(time())
+    currentDate = datetime.now()
     for section in tasks.keys():
       if int(tasks[section]['gpio_pin']) == GPIO:
           logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', Section "' + section + '"')
-          logger.debug('(nextDeadlineDate)EpochSeconds/currentEpochSeconds(sec) = ' + str(mktime(tasks[section]['nextDeadlineDate'])) + "/" + str(currentEpochSeconds))
+          logger.debug('currentDate = ' + currentDate.strftime('%Y-%m-%d %a %I:%M:%S%p'))
+          logger.debug('nextDeadlineDate = ' + tasks[section]['nextDeadlineDate'].strftime('%Y-%m-%d %a %I:%M:%S%p'))
+          logger.debug('nextGraceDate = ' + tasks[section]['nextGraceDate'].strftime('%Y-%m-%d %a %I:%M:%S%p'))
 
-          if currentEpochSeconds > mktime(tasks[section]['nextGraceDate']): # when in window of it being due.
+          if currentDate > tasks[section]['nextGraceDate']: # when in window of it being due.
             # task was completed, so calc next time deadlines and set green.
-            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(mktime(tasks[section]['nextDeadlineDate'])+1, tasks[section])
+      #      if something:
+      #        currentDate = currentDate + timedelta(seconds = 1)
+            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentDate, tasks[section])
             tasks[section]['currentColor'] = 'grn'
 
           write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
@@ -67,10 +71,14 @@ def cbf_released(GPIO, level, tick):
                        str(int(tasks[section]['led_length'])) + \
                        '\nrender\n')
 
-def getNextDeadLine(currentEpochSeconds, section):
-  nextDeadlineDate = section['crontab'].next(datetime.fromtimestamp(currentEpochSeconds), default_utc=True) + currentEpochSeconds
-  logger.debug('New nextDeadlineDate = ' + str(nextDeadlineDate))
-  return localtime(nextDeadlineDate), localtime(nextDeadlineDate - int(section['grace']))
+def getNextDeadLine(currentDate, section):
+  nextDeadlineDate = currentDate + timedelta(seconds = section['crontab'].next(currentDate.timestamp())) # Crontab.next() returns remaining seconds.
+  logger.debug('New nextDeadlineDate = ' + nextDeadlineDate.strftime('%Y-%m-%d %a %I:%M:%S%p'))
+
+  nextGraceDate = nextDeadlineDate - timedelta(seconds = int(section['grace'])) # grace is already in seconds.
+  logger.debug('New nextGraceDate = ' + nextGraceDate.strftime('%Y-%m-%d %a %I:%M:%S%p'))
+
+  return nextDeadlineDate, nextGraceDate
 
 def main():
   global ws281x
@@ -88,7 +96,7 @@ def main():
   buttonPins = []
   tasks = {}
 
-  currentEpochSeconds = round(time())
+  currentDate = datetime.now()
   for section in config.keys():
     maxTemp = int(config[section]['led_start']) + int(config[section]['led_length'])
     logger.debug("section = " + section + \
@@ -104,7 +112,7 @@ def main():
       buttonPins.append(int(config[section]['gpio_pin']))
       tasks[section] = config[section]
       tasks[section]['crontab'] = CronTab(tasks[section]['deadline'])
-      tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentEpochSeconds, tasks[section])
+      tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentDate, tasks[section])
       tasks[section]['currentColor'] = 'off'
       
   logger.log(logging.DEBUG-4, "list of tasks = \r\n" + pp.pformat(list(tasks.keys())))
@@ -159,17 +167,17 @@ def main():
   try:
     while True:
 
-      currentEpochSeconds = round(time())
+      currentDate = datetime.now()
       for section in tasks.keys():
         if tasks[section]['gpio_pin'].isdigit():
           priorColor = tasks[section]['currentColor']
-          if currentEpochSeconds > mktime(tasks[section]['nextDeadlineDate']) and (priorColor != 'grn' or priorColor == 'ylw'):
+          if currentDate > tasks[section]['nextDeadlineDate'] and (priorColor != 'grn' or priorColor == 'ylw'):
             tasks[section]['currentColor'] = 'red'
-          elif currentEpochSeconds > mktime(tasks[section]['nextGraceDate']):
+          elif currentDate > tasks[section]['nextGraceDate']:
             tasks[section]['currentColor'] = 'ylw'
 
           if priorColor != tasks[section]['currentColor']:
-            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentEpochSeconds, tasks[section])
+            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentDate, tasks[section])
             write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                          colors[tasks[section]['currentColor']]  + ',' + \
                          str(tasks[section]['led_start']) + ',' + \
