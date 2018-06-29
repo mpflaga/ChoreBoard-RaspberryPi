@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 # python standard libraries
-import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy
+import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy, geocoder
 from crontab import CronTab
 from datetime import datetime, timedelta
 from time import time, sleep, localtime, mktime
+from astral import Location
 
 # Raspberry Pi specific libraries
 import pigpio
@@ -105,7 +106,11 @@ def main():
   ws281x['LedCount'] = 0
   buttonPins = []
   tasks = {}
-
+  
+  config['Title 0']['dawn'], config['Title 0']['sunset'] = getSunUPandSunDown()
+  
+  logger.log(logging.DEBUG-2, 'config["Title 0"] = ' + pp.pformat(config['Title 0']))
+  
   currentDate = datetime.now()
   for section in config.keys():
     if 'led_start' in config[section]:
@@ -137,15 +142,6 @@ def main():
 
   #### POST - Neopixel Pre Operating Self Tests ####
   logger.debug("initializing ws2812svr")
-  
-  print('Thinking about Brightness');
-  if 'brightness' in config['Title 0'].keys():
-    ws281x['Brightness'] = config['Title 0']['brightness']
-    logger.log(logging.DEBUG-1, 'Brightness set from INIs Title to ' + ws281x['Brightness']);
-  if args.brightness is not None:
-    ws281x['Brightness'] = args.brightness
-    logger.log(logging.DEBUG-1, 'Brightness set from Arguments to ' + ws281x['Brightness']);
-  assert 0 < int(ws281x['Brightness']) < 256
   
   write_ws281x('setup {0},{1},{2},{3},{4},{5}\ninit\n'.format(ws281x['PWMchannel'], ws281x['LedCount'], ws281x['LedType'], ws281x['Invert'], ws281x['Brightness'], ws281x['NeopixelPin']))
   for colorName in ['red', 'grn', 'blu', 'off']:
@@ -189,8 +185,28 @@ def main():
   #### Main Loop
   try:
     while True:
-
       currentDate = datetime.now()
+
+      if config['Title 0']['dawn'] < currentDate :
+        logger.info('Time to Brighten the LEDs')
+        config['Title 0']['dawn'], _ = getSunUPandSunDown() # get next dawn
+        ws281x['Brightness'] = args.brightness #MPF - WIP not quite right value
+        write_ws281x('brightness ' + str(ws281x['PWMchannel']) + ',' + \
+             ws281x['Brightness']  + ',' + \
+             #str(config['Title 0']['led_start']) + ',' + \
+             #str(int(config['Title 0']['led_length'])) + \
+             '\nrender\n')
+
+      elif previousDate < config['Title 0']['sunset'] < currentDate :
+        logger.info('Time to Dim the LEDs')
+        _, config['Title 0']['sunset'] = getSunUPandSunDown() # get next sunset
+        ws281x['Brightness'] = '2' #MPF - WIP needs to be args.nightbrightness
+        write_ws281x('brightness ' + str(ws281x['PWMchannel']) + ',' + \
+             ws281x['Brightness']  + ',' + \
+             #str(config['Title 0']['led_start']) + ',' + \
+             #str(int(config['Title 0']['led_length'])) + \
+             '\nrender\n')
+      
       for section in tasks.keys():
         if tasks[section]['gpio_pin'].isdigit():
           priorColor = tasks[section]['currentColor']
@@ -218,6 +234,22 @@ def main():
 
 #end of main():
 
+def  getSunUPandSunDown():
+
+  # geolocate dawn and sunset
+  try:
+    g = geocoder.ip('me')
+    logger.log(logging.DEBUG-3, 'Geolocation found = ' + pp.pformat(g.lat))
+    l = Location()
+    l.latitude = g.lat
+    l.longitude = g.lng
+    l.timezone = 'US/Eastern'
+    logger.log(logging.DEBUG-3, 'dawn = ' + pp.pformat(l.sun()['dawn']))
+    logger.log(logging.DEBUG-3, 'sunset = ' + pp.pformat(l.sun()['sunset']))
+    return l.sun()['dawn'], l.sun()['sunset']
+  except:
+    return None, None
+
 def walk_leds():
   global ws281x
   for pos in range(ws281x['LedCount']):
@@ -241,6 +273,7 @@ def ParseArgs():
   global args
   global config
   global fn
+  global ws281x
 
   # Get filename of running script without path and or extension.
 
@@ -250,6 +283,7 @@ def ParseArgs():
   parser.add_argument('--config', '-c', help='specify config file', default=(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn + ".ini")))
   parser.add_argument('--ws281x', '-w', help='specify ws281x file handle', default="/dev/ws281x")
   parser.add_argument('--brightness', '-b', help='specify intensity for ws281x 0-255 (off/full)')
+  parser.add_argument('--timezone', '-z', help='specify local timezone, default is US/Eastern')
   parser.add_argument('--stop', '-s', action='store_true', help='just initialize and stop')
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
@@ -264,6 +298,18 @@ def ParseArgs():
   configParse = configparser.ConfigParser()
   configParse.read(args.config)
   config = {s:dict(configParse.items(s)) for s in configParse.sections()}
+
+  if args.brightness is not None:
+    ws281x['Brightness'] = args.brightness
+  elif 'brightness' in config['Title 0'].keys():
+    ws281x['Brightness'] = config['Title 0']['brightness']
+  assert 0 < int(ws281x['Brightness']) < 256
+
+  if args.timezone is not None:
+    config['Title 0']['timezone'] = args.timezone
+  elif 'timezone' not in config['Title 0'].keys():
+    config['Title 0']['timezone'] = 'US/Eastern'
+  
 # end of ParseArgs():
 
 logger = None
