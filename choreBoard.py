@@ -15,7 +15,7 @@ import pigpio
 # ws2812svr constants
 ws281x = { 'PWMchannel' : 2,
            'NeopixelPin' : 13,
-           'Brightness' : 255/2,
+           'Brightness' : int(255/4),
            'Invert' : 0,
            'LedCount' : 0, # will be calculated later, from the INI file
            'LedType' : 1
@@ -137,6 +137,16 @@ def main():
 
   #### POST - Neopixel Pre Operating Self Tests ####
   logger.debug("initializing ws2812svr")
+  
+  print('Thinking about Brightness');
+  if 'brightness' in config['Title 0'].keys():
+    ws281x['Brightness'] = config['Title 0']['brightness']
+    logger.log(logging.DEBUG-1, 'Brightness set from INIs Title to ' + ws281x['Brightness']);
+  if args.brightness is not None:
+    ws281x['Brightness'] = args.brightness
+    logger.log(logging.DEBUG-1, 'Brightness set from Arguments to ' + ws281x['Brightness']);
+  assert 0 < int(ws281x['Brightness']) < 256
+  
   write_ws281x('setup {0},{1},{2},{3},{4},{5}\ninit\n'.format(ws281x['PWMchannel'], ws281x['LedCount'], ws281x['LedType'], ws281x['Invert'], ws281x['Brightness'], ws281x['NeopixelPin']))
   for colorName in ['red', 'grn', 'blu', 'off']:
     logger.debug("POST LED test of ALL " + colorName)
@@ -239,6 +249,7 @@ def ParseArgs():
   parser.add_argument('--verbose', '-v', action='count', help='verbose multi level', default=1)
   parser.add_argument('--config', '-c', help='specify config file', default=(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn + ".ini")))
   parser.add_argument('--ws281x', '-w', help='specify ws281x file handle', default="/dev/ws281x")
+  parser.add_argument('--brightness', '-b', help='specify intensity for ws281x 0-255 (off/full)')
   parser.add_argument('--stop', '-s', action='store_true', help='just initialize and stop')
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
