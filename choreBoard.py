@@ -244,9 +244,11 @@ def  getSunUPandSunDown():
     l.latitude = g.lat
     l.longitude = g.lng
     l.timezone = 'US/Eastern'
-    logger.log(logging.DEBUG-3, 'dawn = ' + pp.pformat(l.sun()['dawn']))
-    logger.log(logging.DEBUG-3, 'sunset = ' + pp.pformat(l.sun()['sunset']))
-    return l.sun()['dawn'], l.sun()['sunset']
+    dawn = l.sun()['dawn'].replace(tzinfo=None)
+    sunset = l.sun()['sunset'].replace(tzinfo=None)
+    logger.log(logging.DEBUG-3, 'dawn = ' + pp.pformat(dawn))
+    logger.log(logging.DEBUG-3, 'sunset = ' + pp.pformat(sunset))
+    return dawn, sunset
   except:
     return None, None
 
