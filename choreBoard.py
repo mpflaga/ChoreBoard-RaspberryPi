@@ -253,6 +253,7 @@ def  getSunUPandSunDown():
     return None, None
 
 def walk_leds():
+  '''repo and manual is located at https://github.com/tom-2015/rpi-ws2812-server'''
   global ws281x
   for pos in range(ws281x['LedCount']):
     write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
