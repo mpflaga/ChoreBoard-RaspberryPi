@@ -25,11 +25,17 @@ ws281x = { 'PWMchannel' : 2,
 colors = { 'off' : '000000',
            'red' : 'FF0000',
            'grn' : '00FF00',
+           'green' : '00FF00',
            'blu' : '0000FF',
+           'blue' : '0000FF',
            'ylw' : 'FFFF00',
+           'yellow' : 'FFFF00',
            'brw' : '7F2805',
+           'brown' : '7F2805',
            'prp' : 'B54A8F',
-           'wht' : 'FFFFFF'
+           'purple' : 'B54A8F',
+           'wht' : 'FFFFFF',
+           'white' : 'FFFFFF'
          }
 
 pp = pprint.PrettyPrinter(indent=4) # Setup format for pprint.
@@ -170,6 +176,15 @@ def main():
     logger.info('Option set to just initialize and then quit')
     quit()
 
+  #### halt if command line requested pause on fill of color.
+  if args.haltOnColor :
+    logger.info('Option set to just stay all ' + args.haltOnColor)
+    write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[args.haltOnColor] + '\nrender\n')
+    while True:
+      pass
+    pi.stop()
+    quit()
+
   pi = pigpio.pi()
   if not pi.connected:
      exit()
@@ -288,6 +303,7 @@ def ParseArgs():
   parser.add_argument('--brightness', '-b', help='specify intensity for ws281x 0-255 (off/full)')
   parser.add_argument('--timezone', '-z', help='specify local timezone, default is US/Eastern')
   parser.add_argument('--stop', '-s', action='store_true', help='just initialize and stop')
+  parser.add_argument('--haltOnColor', '-a', help='specify color to pause on, used for sticker placement. Recommend having dim brightenss', default="wht")
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
 
