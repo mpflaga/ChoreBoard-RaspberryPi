@@ -3,7 +3,7 @@
 # python standard libraries
 import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy, geocoder
 from crontab import CronTab
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from time import time, sleep, localtime, mktime
 from astral import Location
 
@@ -114,6 +114,21 @@ def main():
   tasks = {}
   
   config['Title 0']['dawn'], config['Title 0']['sunset'] = getSunUPandSunDown()
+  currentDate = datetime.now()
+
+  if currentDate < config['Title 0']['dawn'] :
+    logger.info('start the LEDs dimmed for morning')
+    ws281x['Brightness'] = config['Title 0']['nightbrightness']
+  elif config['Title 0']['dawn'] < currentDate < config['Title 0']['sunset'] :
+    logger.info('start the LEDs at day time brightness')
+    ws281x['Brightness'] = config['Title 0']['brightness']
+  else :
+    logger.info('start the LEDs dimmed for night time')
+    ws281x['Brightness'] = config['Title 0']['nightbrightness']
+
+  write_ws281x('brightness ' + str(ws281x['PWMchannel']) + ',' + \
+     ws281x['Brightness'] + \
+     '\nrender\n')
   
   logger.log(logging.DEBUG-2, 'config["Title 0"] = ' + pp.pformat(config['Title 0']))
   
@@ -203,23 +218,19 @@ def main():
       currentDate = datetime.now()
 
       if config['Title 0']['dawn'] < currentDate :
-        logger.info('Time to Brighten the LEDs')
-        config['Title 0']['dawn'], _ = getSunUPandSunDown() # get next dawn
-        ws281x['Brightness'] = args.brightness #MPF - WIP not quite right value
+        logger.info('Time to brighten the LEDs')
+        config['Title 0']['dawn'], _ = getSunUPandSunDown(date.today() + timedelta(days = 1)) # get next dawn
+        ws281x['Brightness'] = config['Title 0']['brightness']
         write_ws281x('brightness ' + str(ws281x['PWMchannel']) + ',' + \
-             ws281x['Brightness']  + ',' + \
-             #str(config['Title 0']['led_start']) + ',' + \
-             #str(int(config['Title 0']['led_length'])) + \
+             ws281x['Brightness'] + \
              '\nrender\n')
 
-      elif previousDate < config['Title 0']['sunset'] < currentDate :
-        logger.info('Time to Dim the LEDs')
-        _, config['Title 0']['sunset'] = getSunUPandSunDown() # get next sunset
-        ws281x['Brightness'] = '2' #MPF - WIP needs to be args.nightbrightness
+      elif config['Title 0']['sunset'] < currentDate :
+        logger.info('Time to dim the LEDs')
+        _, config['Title 0']['sunset'] = getSunUPandSunDown(date.today() + timedelta(days = 1)) # get next sunset
+        ws281x['Brightness'] = config['Title 0']['nightbrightness']
         write_ws281x('brightness ' + str(ws281x['PWMchannel']) + ',' + \
-             ws281x['Brightness']  + ',' + \
-             #str(config['Title 0']['led_start']) + ',' + \
-             #str(int(config['Title 0']['led_length'])) + \
+             ws281x['Brightness'] + \
              '\nrender\n')
       
       for section in tasks.keys():
@@ -249,7 +260,7 @@ def main():
 
 #end of main():
 
-def  getSunUPandSunDown():
+def  getSunUPandSunDown(when = datetime.now()):
 
   # geolocate dawn and sunset
   try:
@@ -259,8 +270,8 @@ def  getSunUPandSunDown():
     l.latitude = g.lat
     l.longitude = g.lng
     l.timezone = 'US/Eastern'
-    dawn = l.sun()['dawn'].replace(tzinfo=None)
-    sunset = l.sun()['sunset'].replace(tzinfo=None)
+    dawn = l.sun(when)['dawn'].replace(tzinfo=None)
+    sunset = l.sun(when)['sunset'].replace(tzinfo=None)
     logger.log(logging.DEBUG-3, 'dawn = ' + pp.pformat(dawn))
     logger.log(logging.DEBUG-3, 'sunset = ' + pp.pformat(sunset))
     return dawn, sunset
@@ -300,10 +311,11 @@ def ParseArgs():
   parser.add_argument('--verbose', '-v', action='count', help='verbose multi level', default=1)
   parser.add_argument('--config', '-c', help='specify config file', default=(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn + ".ini")))
   parser.add_argument('--ws281x', '-w', help='specify ws281x file handle', default="/dev/ws281x")
-  parser.add_argument('--brightness', '-b', help='specify intensity for ws281x 0-255 (off/full)')
+  parser.add_argument('--brightness', '-b', help='specify intensity for ws281x 0-255 (off/full) after sunrise')
+  parser.add_argument('--nightbrightness', '-n', help='same as brightness for after sunset')
   parser.add_argument('--timezone', '-z', help='specify local timezone, default is US/Eastern')
   parser.add_argument('--stop', '-s', action='store_true', help='just initialize and stop')
-  parser.add_argument('--haltOnColor', '-a', help='specify color to pause on, used for sticker placement. Recommend having dim brightenss', default="wht")
+  parser.add_argument('--haltOnColor', '-a', help='specify color to pause on, used for sticker placement. Recommend having dim brightenss')
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
 
@@ -329,6 +341,11 @@ def ParseArgs():
   elif 'timezone' not in config['Title 0'].keys():
     config['Title 0']['timezone'] = 'US/Eastern'
   
+  if args.nightbrightness is not None:
+    config['Title 0']['nightbrightness'] = args.nightbrightness
+  elif 'nightbrightness' not in config['Title 0'].keys():
+    config['Title 0']['nightbrightness'] = '10'
+
 # end of ParseArgs():
 
 logger = None
