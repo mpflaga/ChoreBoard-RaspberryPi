@@ -44,58 +44,45 @@ args = None
 config = None
 tasks = None
 
+def cbf_button(GPIO, level, tick):
+  global tasks
+  
+  currentDate = datetime.now()
+  logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', tick "' + str(tick) + ', currentDate = ' + str(currentDate))
+  for section in tasks.keys():
+    if int(tasks[section]['gpio_pin']) == GPIO:
+      ''' if GPIO is a defined task lets record the button change '''
+      if level == 0 :
+        ''' if button was pressed '''
+        buttonStatus = 'lastButtonPress'
+        color = colors['wht']
+      else:
+        '''  otherwise it was released '''
+        buttonStatus = 'lastButtonRelease'
+        color = colors[tasks[section]['currentColor']]
+        
+      tasks[section][buttonStatus].append(currentDate)
+      tasks[section][buttonStatus] = tasks[section][buttonStatus][-4:] # truncate to only recent changes.
+      logger.log(logging.DEBUG-1, "tasks["+section+"]["+buttonStatus+"] = " + str(tasks[section][buttonStatus][-1]) )
+      logger.log(logging.DEBUG-4, "tasks["+section+"]["+buttonStatus+"] = " + pp.pformat(tasks[section][buttonStatus]) )
 
-def cbf_pressed(GPIO, level, tick):
-    for section in tasks.keys():
-      if int(tasks[section]['gpio_pin']) == GPIO:
-          logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', Section "' + section + '"')
-
-          write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
-                       colors['wht']  + ',' + \
-                       str(tasks[section]['led_start']) + ',' + \
-                       str(int(tasks[section]['led_length'])) + \
-                       '\nrender\n')
-
-def cbf_released(GPIO, level, tick):
-    currentDate = datetime.now()
-    for section in tasks.keys():
-      if int(tasks[section]['gpio_pin']) == GPIO:
-          logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', Section "' + section + '"')
-          logger.debug('currentDate = ' + currentDate.strftime('%Y-%m-%d %a %I:%M:%S%p'))
-          logger.debug('nextDeadlineDate = ' + tasks[section]['nextDeadlineDate'].strftime('%Y-%m-%d %a %I:%M:%S%p'))
-          logger.debug('nextGraceDate = ' + tasks[section]['nextGraceDate'].strftime('%Y-%m-%d %a %I:%M:%S%p'))
-
-          if currentDate > tasks[section]['nextDeadlineDate']:
-            ''' if past due '''
-            logger.debug('After nextDeadlineDate')
-            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentDate, tasks[section])
-            tasks[section]['currentColor'] = 'grn'
-            logger.log(logging.DEBUG-1, 'new nextDeadlineDate = ' + tasks[section]['nextDeadlineDate'].strftime('%Y-%m-%d %a %I:%M:%S%p'))
-            logger.log(logging.DEBUG-1, 'new nextGraceDate = ' + tasks[section]['nextGraceDate'].strftime('%Y-%m-%d %a %I:%M:%S%p'))
-          elif currentDate > tasks[section]['nextGraceDate']:
-            ''' if pending '''
-            currentDate = tasks[section]['nextDeadlineDate']# + timedelta(seconds = 1)
-            logger.log(logging.DEBUG-1, 'After nextGraceDate')
-            logger.log(logging.DEBUG-1, 'using next new currentDate = ' + currentDate.strftime('%Y-%m-%d %a %I:%M:%S%p'))
-            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentDate, tasks[section])
-            tasks[section]['currentColor'] = 'grn'
-            logger.log(logging.DEBUG-1, 'new nextDeadlineDate = ' + tasks[section]['nextDeadlineDate'].strftime('%Y-%m-%d %a %I:%M:%S%p'))
-            logger.log(logging.DEBUG-1, 'new nextGraceDate = ' + tasks[section]['nextGraceDate'].strftime('%Y-%m-%d %a %I:%M:%S%p'))
-
-          write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
-                       colors[tasks[section]['currentColor']]  + ',' + \
-                       str(tasks[section]['led_start']) + ',' + \
-                       str(int(tasks[section]['led_length'])) + \
-                       '\nrender\n')
+      write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
+                   color  + ',' + \
+                   str(tasks[section]['led_start']) + ',' + \
+                   str(int(tasks[section]['led_length'])) + \
+                   '\nrender\n')
 
 def getNextDeadLine(currentDate, section):
   nextDeadlineDate = currentDate + timedelta(seconds = section['crontab'].next(currentDate.timestamp())) # Crontab.next() returns remaining seconds.
-  logger.log(logging.DEBUG-2, 'New nextDeadlineDate = ' + nextDeadlineDate.strftime('%Y-%m-%d %a %I:%M:%S%p'))
+  logger.log(logging.DEBUG-2, 'New nextDeadlineDate = ' + nextDeadlineDate.strftime('%Y-%m-%d %a %H:%M:%S'))
 
   nextGraceDate = nextDeadlineDate - timedelta(seconds = int(section['grace'])) # grace is already in seconds.
-  logger.log(logging.DEBUG-2, 'New nextGraceDate = ' + nextGraceDate.strftime('%Y-%m-%d %a %I:%M:%S%p'))
+  logger.log(logging.DEBUG-2, 'New nextGraceDate = ' + nextGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
+  
+  nextToLateDate = nextDeadlineDate + timedelta(seconds = int(section['grace'])) # grace is already in seconds.
+  logger.log(logging.DEBUG-2, 'New nextGraceDate = ' + nextGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
 
-  return nextDeadlineDate, nextGraceDate
+  return nextDeadlineDate, nextGraceDate, nextToLateDate
 
 def main():
   global ws281x
@@ -113,16 +100,20 @@ def main():
   buttonPins = []
   tasks = {}
   
-  config['Title 0']['dawn'], config['Title 0']['sunset'] = getSunUPandSunDown()
   currentDate = datetime.now()
 
+  ''' Initially determine and adjust for current Day or Night Time Mode of LED brightness '''
+  config['Title 0']['dawn'], config['Title 0']['sunset'] = getSunUPandSunDown()
   if currentDate < config['Title 0']['dawn'] :
+    ''' Morning Mode '''
     logger.info('start the LEDs dimmed for morning')
     ws281x['Brightness'] = config['Title 0']['nightbrightness']
   elif config['Title 0']['dawn'] < currentDate < config['Title 0']['sunset'] :
+    ''' Day Mode '''
     logger.info('start the LEDs at day time brightness')
     ws281x['Brightness'] = config['Title 0']['brightness']
   else :
+    ''' Night Mode '''
     logger.info('start the LEDs dimmed for night time')
     ws281x['Brightness'] = config['Title 0']['nightbrightness']
 
@@ -151,8 +142,10 @@ def main():
         buttonPins.append(int(config[section]['gpio_pin']))
         tasks[section] = config[section]
         tasks[section]['crontab'] = CronTab(tasks[section]['deadline'])
-        tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentDate, tasks[section])
+        tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'], tasks[section]['nextToLateDate'] = getNextDeadLine(currentDate, tasks[section])
         tasks[section]['currentColor'] = 'off'
+        tasks[section]['lastButtonRelease'] = [currentDate]
+        tasks[section]['lastButtonPress'] = [currentDate]
       
   logger.log(logging.DEBUG-4, "list of tasks = \r\n" + pp.pformat(list(tasks.keys())))
   logger.log(logging.DEBUG-5, "tasks = \r\n" + pp.pformat(tasks))
@@ -209,23 +202,24 @@ def main():
      pi.set_mode(buttonPin, pigpio.INPUT)
      pi.set_pull_up_down(buttonPin, pigpio.PUD_UP)
      pi.set_glitch_filter(buttonPin, 100)
-     cb.append(pi.callback(buttonPin, pigpio.FALLING_EDGE, cbf_pressed))
-     cb.append(pi.callback(buttonPin, pigpio.RISING_EDGE, cbf_released))
+     cb.append(pi.callback(buttonPin, pigpio.EITHER_EDGE, cbf_button))
 
   #### Main Loop
   try:
     while True:
       currentDate = datetime.now()
 
+      ''' Determine and or adjust for change in Day or Night Time Mode of LED brightness '''
       if config['Title 0']['dawn'] < currentDate :
+        ''' if we have ran thru the dawn then change to Day Time Mode and get next dawn '''
         logger.info('Time to brighten the LEDs')
         config['Title 0']['dawn'], _ = getSunUPandSunDown(date.today() + timedelta(days = 1)) # get next dawn
         ws281x['Brightness'] = config['Title 0']['brightness']
         write_ws281x('brightness ' + str(ws281x['PWMchannel']) + ',' + \
              ws281x['Brightness'] + \
              '\nrender\n')
-
       elif config['Title 0']['sunset'] < currentDate :
+        ''' if we have ran thru the sunset then change to Day Time Mode and get sunset dawn '''
         logger.info('Time to dim the LEDs')
         _, config['Title 0']['sunset'] = getSunUPandSunDown(date.today() + timedelta(days = 1)) # get next sunset
         ws281x['Brightness'] = config['Title 0']['nightbrightness']
@@ -233,13 +227,31 @@ def main():
              ws281x['Brightness'] + \
              '\nrender\n')
       
+      ''' Check for Button Changes '''
       for section in tasks.keys():
         if tasks[section]['gpio_pin'].isdigit():
           priorColor = tasks[section]['currentColor']
-          if (currentDate > tasks[section]['nextDeadlineDate']) and (priorColor != 'grn' or priorColor == 'ylw'):
-            tasks[section]['currentColor'] = 'red'
-          elif (currentDate > tasks[section]['nextGraceDate']) and (priorColor != 'grn'):
-            tasks[section]['currentColor'] = 'ylw'
+
+          if (tasks[section]['nextGraceDate'] < tasks[section]['lastButtonRelease'][-1] < tasks[section]['nextToLateDate']) :
+            ''' then between Grace and To Late '''
+            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'], tasks[section]['nextToLateDate'] = \
+              getNextDeadLine(currentDate, tasks[section])
+
+          if (tasks[section]['nextGraceDate'] < currentDate) and priorColor != 'off':
+            ''' then before Grace and if not off then turn off '''
+            colors[tasks[section]['currentColor']] = colors['off']
+
+          elif (tasks[section]['nextGraceDate'] < currentDate < tasks[section]['nextDeadlineDate']) :
+            ''' then in between grace and deadline '''
+            colors[tasks[section]['currentColor']] = colors['ylw']
+
+          elif (tasks[section]['nextDeadlineDate'] < currentDate < tasks[section]['nextToLateDate']) :
+            ''' then between deadline and To Late '''
+            colors[tasks[section]['currentColor']] = colors['red']
+
+          elif (tasks[section]['nextToLateDate'] < currentDate) and priorColor != 'off':
+            ''' then after deadline and if not off then turn off '''
+            colors[tasks[section]['currentColor']] = colors['off']
 
           if priorColor != tasks[section]['currentColor']:
             write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
@@ -247,8 +259,6 @@ def main():
                          str(tasks[section]['led_start']) + ',' + \
                          str(int(tasks[section]['led_length'])) + \
                          '\nrender\n')
-                         
-          # WIP - MPF - Need to add a GRN clear timer
 
       sleep(1)
 
@@ -260,7 +270,7 @@ def main():
 
 #end of main():
 
-def  getSunUPandSunDown(when = datetime.now()):
+def getSunUPandSunDown(when = datetime.now()):
 
   # geolocate dawn and sunset
   try:
@@ -316,7 +326,7 @@ def ParseArgs():
   parser.add_argument('--timezone', '-z', help='specify local timezone, default is US/Eastern')
   parser.add_argument('--stop', '-s', action='store_true', help='just initialize and stop')
   parser.add_argument('--haltOnColor', '-a', help='specify color to pause on, used for sticker placement. Recommend having dim brightenss')
-  parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup', type=float, default="0.25")
+  parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup, in seconds', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
 
   # Read in and parse the command line arguments
@@ -356,7 +366,7 @@ def setupLogging():
   global logger
 
   # Setup display and file logging with level support.
-  logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s] (%(funcName)s) %(message)s")
+  logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-7.7s] (%(funcName)s) %(message)s")
   logger = logging.getLogger()
   fileHandler = logging.handlers.RotatingFileHandler("{0}/{1}.log".format('/var/log/'+ fn +'/', fn), maxBytes=2*1024*1024, backupCount=2)
 
