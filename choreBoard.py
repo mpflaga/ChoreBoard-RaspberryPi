@@ -54,11 +54,11 @@ def cbf_button(GPIO, level, tick):
       ''' if GPIO is a defined task lets record the button change '''
       if level == 0 :
         ''' if button was pressed '''
-        buttonStatus = 'lastButtonPress'
+        buttonStatus = 'ButtonPresses'
         color = colors['wht']
       else:
         '''  otherwise it was released '''
-        buttonStatus = 'lastButtonRelease'
+        buttonStatus = 'ButtonReleases'
         color = colors[tasks[section]['currentColor']]
         
       tasks[section][buttonStatus].append(currentDate)
@@ -73,16 +73,16 @@ def cbf_button(GPIO, level, tick):
                    '\nrender\n')
 
 def getNextDeadLine(currentDate, section):
-  nextDeadlineDate = currentDate + timedelta(seconds = section['crontab'].next(currentDate.timestamp())) # Crontab.next() returns remaining seconds.
-  logger.log(logging.DEBUG-2, 'New nextDeadlineDate = ' + nextDeadlineDate.strftime('%Y-%m-%d %a %H:%M:%S'))
+  PendingDueDate = currentDate + timedelta(seconds = section['crontab'].next(currentDate.timestamp())) # Crontab.next() returns remaining seconds.
+  logger.log(logging.DEBUG-2, 'New PendingDueDate = ' + PendingDueDate.strftime('%Y-%m-%d %a %H:%M:%S'))
 
-  nextGraceDate = nextDeadlineDate - timedelta(seconds = int(section['grace'])) # grace is already in seconds.
-  logger.log(logging.DEBUG-2, 'New nextGraceDate = ' + nextGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
+  PendingGraceDate = PendingDueDate - timedelta(seconds = int(section['grace'])) # grace is already in seconds.
+  logger.log(logging.DEBUG-2, 'New PendingGraceDate = ' + PendingGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
   
-  nextToLateDate = nextDeadlineDate + timedelta(seconds = int(section['grace'])) # grace is already in seconds.
-  logger.log(logging.DEBUG-2, 'New nextGraceDate = ' + nextGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
+  PendingToLateDate = PendingDueDate + timedelta(seconds = int(section['grace'])) # grace is already in seconds.
+  logger.log(logging.DEBUG-2, 'New PendingGraceDate = ' + PendingGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
 
-  return nextDeadlineDate, nextGraceDate, nextToLateDate
+  return PendingDueDate, PendingGraceDate, PendingToLateDate
 
 def main():
   global ws281x
@@ -151,10 +151,10 @@ def main():
         buttonPins[int(config[section]['gpio_pin'])] = glitch
         tasks[section] = config[section]
         tasks[section]['crontab'] = CronTab(tasks[section]['deadline'])
-        tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'], tasks[section]['nextToLateDate'] = getNextDeadLine(currentDate, tasks[section])
+        tasks[section]['PendingDueDate'], tasks[section]['PendingGraceDate'], tasks[section]['PendingToLateDate'] = getNextDeadLine(currentDate, tasks[section])
         tasks[section]['currentColor'] = 'off'
-        tasks[section]['lastButtonRelease'] = [currentDate]
-        tasks[section]['lastButtonPress'] = [currentDate]
+        tasks[section]['ButtonReleases'] = [currentDate]
+        tasks[section]['ButtonPresses'] = [currentDate]
       
   logger.log(logging.DEBUG-4, "list of tasks = \r\n" + pp.pformat(list(tasks.keys())))
   logger.log(logging.DEBUG-5, "tasks = \r\n" + pp.pformat(tasks))
@@ -241,24 +241,24 @@ def main():
         if tasks[section]['gpio_pin'].isdigit():
           priorColor = tasks[section]['currentColor']
 
-          if (tasks[section]['nextGraceDate'] < tasks[section]['lastButtonRelease'][-1] < tasks[section]['nextToLateDate']) :
+          if (tasks[section]['PendingGraceDate'] < tasks[section]['ButtonReleases'][-1] < tasks[section]['PendingToLateDate']) :
             ''' then between Grace and To Late '''
-            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'], tasks[section]['nextToLateDate'] = \
+            tasks[section]['PendingDueDate'], tasks[section]['PendingGraceDate'], tasks[section]['PendingToLateDate'] = \
               getNextDeadLine(currentDate, tasks[section])
 
-          if (tasks[section]['nextGraceDate'] < currentDate) and priorColor != 'off':
+          if (tasks[section]['PendingGraceDate'] < currentDate) and priorColor != 'off':
             ''' then before Grace and if not off then turn off '''
             colors[tasks[section]['currentColor']] = colors['off']
 
-          elif (tasks[section]['nextGraceDate'] < currentDate < tasks[section]['nextDeadlineDate']) :
+          elif (tasks[section]['PendingGraceDate'] < currentDate < tasks[section]['PendingDueDate']) :
             ''' then in between grace and deadline '''
             colors[tasks[section]['currentColor']] = colors['ylw']
 
-          elif (tasks[section]['nextDeadlineDate'] < currentDate < tasks[section]['nextToLateDate']) :
+          elif (tasks[section]['PendingDueDate'] < currentDate < tasks[section]['PendingToLateDate']) :
             ''' then between deadline and To Late '''
             colors[tasks[section]['currentColor']] = colors['red']
 
-          elif (tasks[section]['nextToLateDate'] < currentDate) and priorColor != 'off':
+          elif (tasks[section]['PendingToLateDate'] < currentDate) and priorColor != 'off':
             ''' then after deadline and if not off then turn off '''
             colors[tasks[section]['currentColor']] = colors['off']
 
