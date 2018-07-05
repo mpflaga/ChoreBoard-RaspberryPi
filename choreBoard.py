@@ -97,7 +97,7 @@ def main():
 
   # and determine maximum LED position
   ws281x['LedCount'] = 0
-  buttonPins = []
+  buttonPins = {}
   tasks = {}
   
   currentDate = datetime.now()
@@ -137,9 +137,18 @@ def main():
                  ", ws281x['LedCount'] = " + str(ws281x['LedCount']-1)) if 'led_length' in config[section] else "" + \
                  ', deadline = "' + config[section]['deadline'] + '"' if 'deadline' in config[section] else "" \
                  )
+
     if 'gpio_pin' in config[section]:
       if config[section]['gpio_pin'].isdigit():
-        buttonPins.append(int(config[section]['gpio_pin']))
+
+        ''' set glitch filter level either from last GPIO or Title or argument '''
+        if 'glitch' in config[section].keys(): # if found in section
+          glitch = int(config[section]['glitch']) # then go with it.
+        elif 'glitch' in config['Title 0'].keys(): # if found in Title 0
+          glitch = int(config['Title 0']['glitch'])
+        else:
+          glitch = int(args.glitch) # default
+        buttonPins[int(config[section]['gpio_pin'])] = glitch
         tasks[section] = config[section]
         tasks[section]['crontab'] = CronTab(tasks[section]['deadline'])
         tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'], tasks[section]['nextToLateDate'] = getNextDeadLine(currentDate, tasks[section])
@@ -151,8 +160,7 @@ def main():
   logger.log(logging.DEBUG-5, "tasks = \r\n" + pp.pformat(tasks))
 
   logger.debug("Max LED position found to be " + str(ws281x['LedCount'] - 1))
-  buttonPins = list(set(buttonPins))
-  logger.debug("list of pins = " + pp.pformat(buttonPins))
+  logger.debug("dict of pins = " + pp.pformat(buttonPins))
 
   #### POST - Neopixel Pre Operating Self Tests ####
   logger.debug("initializing ws2812svr")
@@ -199,10 +207,11 @@ def main():
 
   cb = []
   for buttonPin in buttonPins:
-     pi.set_mode(buttonPin, pigpio.INPUT)
-     pi.set_pull_up_down(buttonPin, pigpio.PUD_UP)
-     pi.set_glitch_filter(buttonPin, 100)
-     cb.append(pi.callback(buttonPin, pigpio.EITHER_EDGE, cbf_button))
+    ''' config each used GPIO pins '''
+    pi.set_mode(buttonPin, pigpio.INPUT)
+    pi.set_pull_up_down(buttonPin, pigpio.PUD_UP)
+    pi.set_glitch_filter(buttonPin, buttonPins[buttonPin])
+    cb.append(pi.callback(buttonPin, pigpio.EITHER_EDGE, cbf_button))
 
   #### Main Loop
   try:
@@ -328,6 +337,7 @@ def ParseArgs():
   parser.add_argument('--haltOnColor', '-a', help='specify color to pause on, used for sticker placement. Recommend having dim brightenss')
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup, in seconds', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
+  parser.add_argument('--glitch', '-g', help='debounce period in ms for GPIO', default=100)
 
   # Read in and parse the command line arguments
   args = parser.parse_args()
