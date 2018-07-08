@@ -198,8 +198,18 @@ def main():
     logger.info('Option set to just stay all ' + args.haltOnColor)
     if args.haltOnColor.lower() == 'rainbow' :
       write_ws281x('rainbow ' + str(ws281x['PWMchannel']) + '\nrender\n')
+    elif args.haltOnColor.lower() == 'stickers' :
+      palete = ['red', 'grn', 'blu', 'ylw', 'brw', 'prp', 'wht']
+      for section in tasks.keys():
+        write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
+                     colors[palete[0]]  + ',' + \
+                     str(tasks[section]['led_start']) + ',' + \
+                     str(int(tasks[section]['led_length'])) + \
+                     '\nrender\n')
+        palete = ([palete[-1]] + palete[0:-1])
     else:
       write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[args.haltOnColor] + '\nrender\n')
+    logger.info('pausing on haltOnColor')
     while True:
       pass
     pi.stop()
@@ -352,7 +362,7 @@ def ParseArgs():
   parser.add_argument('--nightbrightness', '-n', help='same as brightness for after sunset')
   parser.add_argument('--timezone', '-z', help='specify local timezone, default is US/Eastern')
   parser.add_argument('--stop', '-s', action='store_true', help='just initialize and stop')
-  parser.add_argument('--haltOnColor', '-a', help='specify color to pause on, used for sticker placement. Recommend having dim brightenss')
+  parser.add_argument('--haltOnColor', '-a', help='specify [color], "rainbow" or "sticker" to pause on. Recommend having dim brightenss')
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup, in seconds', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
   parser.add_argument('--glitch', '-g', help='debounce period in ms for GPIO', default=100)
