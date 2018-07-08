@@ -196,7 +196,10 @@ def main():
   #### halt if command line requested pause on fill of color.
   if args.haltOnColor :
     logger.info('Option set to just stay all ' + args.haltOnColor)
-    write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[args.haltOnColor] + '\nrender\n')
+    if args.haltOnColor.lower() == 'rainbow' :
+      write_ws281x('rainbow ' + str(ws281x['PWMchannel']) + '\nrender\n')
+    else:
+      write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[args.haltOnColor] + '\nrender\n')
     while True:
       pass
     pi.stop()
