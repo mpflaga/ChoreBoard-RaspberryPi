@@ -172,8 +172,9 @@ def main():
     write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[colorName] + '\nrender\n')
     sleep(args.postDelay)
 
+  config['Title 0']['currentColor'] = 'wht'
   write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
-               colors['wht']  + ',' + \
+               colors[config['Title 0']['currentColor']]  + ',' + \
                str(config['Title 0']['led_start']) + ',' + \
                str(int(config['Title 0']['led_length'])) + \
                '\nrender\n')
@@ -276,29 +277,30 @@ def main():
           
           ''' log state change and determine new deadlines if needed '''
           if priorState != tasks[section]['state']:
-            logger.debug('Changing state from ' + str(priorState) + ' to ' + tasks[section]['state'])
+            logger.debug('tasks[' + section + '] Changing state from ' + str(priorState) + ' to ' + tasks[section]['state'])
 
           ''' check if button is not being depressed '''
           if (pi.read(int(tasks[section]['gpio_pin'])) != 0) :
             ''' determine new color if needed '''
             priorColor = tasks[section]['currentColor']
             if tasks[section]['state'] in ['off', 'beforeGrace'] and priorColor != 'off':
-              tasks[section]['currentColor'] = colors['off']
+              tasks[section]['currentColor'] = 'off'
 
             if tasks[section]['state'] == 'pending' and priorColor != 'ylw' :
-              tasks[section]['currentColor'] = colors['ylw']
+              tasks[section]['currentColor'] = 'ylw'
 
             if tasks[section]['state'] == 'late' and priorColor != 'red':
-              tasks[section]['currentColor'] = colors['red']
+              tasks[section]['currentColor'] = 'red'
 
             ''' update LED if color change '''
             if priorColor != tasks[section]['currentColor']:
+              logger.log(logging.DEBUG-4, "tasks["+section+"] = " + pp.pformat(tasks[section]) )
               write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                            colors[tasks[section]['currentColor']]  + ',' + \
                            str(tasks[section]['led_start']) + ',' + \
                            str(int(tasks[section]['led_length'])) + \
                            '\nrender\n')
-
+                           
       sleep(1)
 
   except KeyboardInterrupt:
