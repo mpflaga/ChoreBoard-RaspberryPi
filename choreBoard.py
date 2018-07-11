@@ -286,11 +286,14 @@ def main():
             if tasks[section]['state'] in ['off', 'beforeGrace'] and priorColor != 'off':
               tasks[section]['currentColor'] = 'off'
 
-            if tasks[section]['state'] == 'pending' and priorColor != 'ylw' :
+            elif tasks[section]['state'] == 'pending' and priorColor != 'ylw' :
               tasks[section]['currentColor'] = 'ylw'
 
-            if tasks[section]['state'] == 'late' and priorColor != 'red':
+            elif tasks[section]['state'] == 'late' and priorColor != 'red':
               tasks[section]['currentColor'] = 'red'
+
+            elif tasks[section]['state'] == 'completed' and priorColor != 'grn':
+              tasks[section]['currentColor'] = 'grn'
 
             ''' update LED if color change '''
             if priorColor != tasks[section]['currentColor']:
