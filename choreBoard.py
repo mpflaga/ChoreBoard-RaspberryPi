@@ -54,17 +54,17 @@ def cbf_button(GPIO, level, tick):
       ''' if GPIO is a defined task lets record the button change '''
       if level == 0 :
         ''' if button was pressed '''
-        buttonStatus = 'lastButtonPress'
+        buttonAction = 'ButtonPresses'
         color = colors['wht']
       else:
         '''  otherwise it was released '''
-        buttonStatus = 'lastButtonRelease'
+        buttonAction = 'ButtonReleases'
         color = colors[tasks[section]['currentColor']]
         
-      tasks[section][buttonStatus].append(currentDate)
-      tasks[section][buttonStatus] = tasks[section][buttonStatus][-4:] # truncate to only recent changes.
-      logger.log(logging.DEBUG-1, "tasks["+section+"]["+buttonStatus+"] = " + str(tasks[section][buttonStatus][-1]) )
-      logger.log(logging.DEBUG-4, "tasks["+section+"]["+buttonStatus+"] = " + pp.pformat(tasks[section][buttonStatus]) )
+      tasks[section][buttonAction].append(currentDate)
+      tasks[section][buttonAction] = tasks[section][buttonAction][-4:] # truncate to only recent changes.
+      logger.log(logging.DEBUG-1, "tasks["+section+"]["+buttonAction+"] = " + str(tasks[section][buttonAction][-1]) )
+      logger.log(logging.DEBUG-4, "tasks["+section+"]["+buttonAction+"] = " + pp.pformat(tasks[section][buttonAction]) )
 
       write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                    color  + ',' + \
@@ -73,16 +73,16 @@ def cbf_button(GPIO, level, tick):
                    '\nrender\n')
 
 def getNextDeadLine(currentDate, section):
-  nextDeadlineDate = currentDate + timedelta(seconds = section['crontab'].next(currentDate.timestamp())) # Crontab.next() returns remaining seconds.
-  logger.log(logging.DEBUG-2, 'New nextDeadlineDate = ' + nextDeadlineDate.strftime('%Y-%m-%d %a %H:%M:%S'))
+  PendingDueDate = currentDate + timedelta(seconds = section['crontab'].next(currentDate.timestamp())) # Crontab.next() returns remaining seconds.
+  logger.log(logging.DEBUG-2, 'New PendingDueDate = ' + PendingDueDate.strftime('%Y-%m-%d %a %H:%M:%S'))
 
-  nextGraceDate = nextDeadlineDate - timedelta(seconds = int(section['grace'])) # grace is already in seconds.
-  logger.log(logging.DEBUG-2, 'New nextGraceDate = ' + nextGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
+  PendingGraceDate = PendingDueDate - timedelta(seconds = int(section['grace'])) # Time to Start Yellow LEDs
+  logger.log(logging.DEBUG-2, 'New PendingGraceDate = ' + PendingGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
   
-  nextToLateDate = nextDeadlineDate + timedelta(seconds = int(section['grace'])) # grace is already in seconds.
-  logger.log(logging.DEBUG-2, 'New nextGraceDate = ' + nextGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
+  PendingToLateDate = PendingDueDate + timedelta(seconds = int(section['persist'])) # delay until turn off LEDs
+  logger.log(logging.DEBUG-2, 'New PendingGraceDate = ' + PendingGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
 
-  return nextDeadlineDate, nextGraceDate, nextToLateDate
+  return PendingDueDate, PendingGraceDate, PendingToLateDate
 
 def main():
   global ws281x
@@ -151,10 +151,11 @@ def main():
         buttonPins[int(config[section]['gpio_pin'])] = glitch
         tasks[section] = config[section]
         tasks[section]['crontab'] = CronTab(tasks[section]['deadline'])
-        tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'], tasks[section]['nextToLateDate'] = getNextDeadLine(currentDate, tasks[section])
+        tasks[section]['PendingDueDate'], tasks[section]['PendingGraceDate'], tasks[section]['PendingToLateDate'] = getNextDeadLine(currentDate, tasks[section])
         tasks[section]['currentColor'] = 'off'
-        tasks[section]['lastButtonRelease'] = [currentDate]
-        tasks[section]['lastButtonPress'] = [currentDate]
+        tasks[section]['ButtonReleases'] = [currentDate]
+        tasks[section]['ButtonPresses'] = [currentDate]
+        tasks[section]['state'] = None
       
   logger.log(logging.DEBUG-4, "list of tasks = \r\n" + pp.pformat(list(tasks.keys())))
   logger.log(logging.DEBUG-5, "tasks = \r\n" + pp.pformat(tasks))
@@ -195,7 +196,20 @@ def main():
   #### halt if command line requested pause on fill of color.
   if args.haltOnColor :
     logger.info('Option set to just stay all ' + args.haltOnColor)
-    write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[args.haltOnColor] + '\nrender\n')
+    if args.haltOnColor.lower() == 'rainbow' :
+      write_ws281x('rainbow ' + str(ws281x['PWMchannel']) + '\nrender\n')
+    elif args.haltOnColor.lower() == 'stickers' :
+      palete = ['red', 'grn', 'blu', 'ylw', 'brw', 'prp', 'wht']
+      for section in tasks.keys():
+        write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
+                     colors[palete[0]]  + ',' + \
+                     str(tasks[section]['led_start']) + ',' + \
+                     str(int(tasks[section]['led_length'])) + \
+                     '\nrender\n')
+        palete = ([palete[-1]] + palete[0:-1])
+    else:
+      write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[args.haltOnColor] + '\nrender\n')
+    logger.info('pausing on haltOnColor')
     while True:
       pass
     pi.stop()
@@ -241,35 +255,49 @@ def main():
       ''' Check for Button Changes '''
       for section in tasks.keys():
         if tasks[section]['gpio_pin'].isdigit():
-          priorColor = tasks[section]['currentColor']
 
-          if (tasks[section]['nextGraceDate'] < tasks[section]['lastButtonRelease'][-1] < tasks[section]['nextToLateDate']) :
-            ''' then between Grace and To Late '''
-            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'], tasks[section]['nextToLateDate'] = \
-              getNextDeadLine(currentDate, tasks[section])
+          ''' determine new state if needed '''
+          priorState = tasks[section]['state']
+          if ((currentDate <= tasks[section]['PendingGraceDate']) and (tasks[section]['state'] != 'beforeGrace')):
+            tasks[section]['state'] = 'beforeGrace'
+          elif ((tasks[section]['PendingGraceDate'] < tasks[section]['ButtonReleases'][-1] <= tasks[section]['PendingToLateDate']) and (tasks[section]['state'] != 'completed')):
+            tasks[section]['state'] = 'completed'
+          elif ((tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingDueDate']) and not (tasks[section]['state'] in ['completed', 'pending'])) :
+            tasks[section]['state'] = 'pending'
+          elif ((tasks[section]['PendingDueDate'] < currentDate <= tasks[section]['PendingToLateDate']) and not (tasks[section]['state'] in ['completed', 'late'])) :
+            tasks[section]['state'] = 'late'
+          elif (tasks[section]['PendingToLateDate'] < currentDate) and tasks[section]['state'] != 'off':
+            ''' if after deadline and if not off then turn off and set new deadlines '''
+            tasks[section]['state'] = 'off'
+            tasks[section]['PendingDueDate'], tasks[section]['PendingGraceDate'], tasks[section]['PendingToLateDate'] = getNextDeadLine(currentDate, tasks[section])
+          else: 
+            ''' no state change '''
+            pass 
+          
+          ''' log state change and determine new deadlines if needed '''
+          if priorState != tasks[section]['state']:
+            logger.debug('Changing state from ' + str(priorState) + ' to ' + tasks[section]['state'])
 
-          if (tasks[section]['nextGraceDate'] < currentDate) and priorColor != 'off':
-            ''' then before Grace and if not off then turn off '''
-            colors[tasks[section]['currentColor']] = colors['off']
+          ''' check if button is not being depressed '''
+          if (pi.read(int(tasks[section]['gpio_pin'])) != 0) :
+            ''' determine new color if needed '''
+            priorColor = tasks[section]['currentColor']
+            if tasks[section]['state'] in ['off', 'beforeGrace'] and priorColor != 'off':
+              tasks[section]['currentColor'] = colors['off']
 
-          elif (tasks[section]['nextGraceDate'] < currentDate < tasks[section]['nextDeadlineDate']) :
-            ''' then in between grace and deadline '''
-            colors[tasks[section]['currentColor']] = colors['ylw']
+            if tasks[section]['state'] == 'pending' and priorColor != 'ylw' :
+              tasks[section]['currentColor'] = colors['ylw']
 
-          elif (tasks[section]['nextDeadlineDate'] < currentDate < tasks[section]['nextToLateDate']) :
-            ''' then between deadline and To Late '''
-            colors[tasks[section]['currentColor']] = colors['red']
+            if tasks[section]['state'] == 'late' and priorColor != 'red':
+              tasks[section]['currentColor'] = colors['red']
 
-          elif (tasks[section]['nextToLateDate'] < currentDate) and priorColor != 'off':
-            ''' then after deadline and if not off then turn off '''
-            colors[tasks[section]['currentColor']] = colors['off']
-
-          if priorColor != tasks[section]['currentColor']:
-            write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
-                         colors[tasks[section]['currentColor']]  + ',' + \
-                         str(tasks[section]['led_start']) + ',' + \
-                         str(int(tasks[section]['led_length'])) + \
-                         '\nrender\n')
+            ''' update LED if color change '''
+            if priorColor != tasks[section]['currentColor']:
+              write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
+                           colors[tasks[section]['currentColor']]  + ',' + \
+                           str(tasks[section]['led_start']) + ',' + \
+                           str(int(tasks[section]['led_length'])) + \
+                           '\nrender\n')
 
       sleep(1)
 
@@ -337,7 +365,7 @@ def ParseArgs():
   parser.add_argument('--nightbrightness', '-n', help='same as brightness for after sunset')
   parser.add_argument('--timezone', '-z', help='specify local timezone, default is US/Eastern')
   parser.add_argument('--stop', '-s', action='store_true', help='just initialize and stop')
-  parser.add_argument('--haltOnColor', '-a', help='specify color to pause on, used for sticker placement. Recommend having dim brightenss')
+  parser.add_argument('--haltOnColor', '-a', help='specify [color], "rainbow" or "sticker" to pause on. Recommend having dim brightenss')
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup, in seconds', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
   parser.add_argument('--glitch', '-g', help='debounce period in ms for GPIO', default=100)
