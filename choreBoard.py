@@ -219,10 +219,11 @@ def main():
       currentDate = datetime.now()
 
       ''' Determine and or adjust for change in Day or Night Time Mode of LED brightness '''
-      if config['Title 0']['dawn'] < currentDate :
+      if config['Title 0']['dawn'] < currentDate <= config['Title 0']['sunset']:
         ''' if we have ran thru the dawn then change to Day Time Mode and get next dawn '''
         logger.info('Time to brighten the LEDs')
         config['Title 0']['dawn'], _ = getSunUPandSunDown(date.today() + timedelta(days = 1)) # get next dawn
+        logger.log(logging.DEBUG-2, 'config["Title 0"] = ' + pp.pformat(config['Title 0']))
         ws281x['Brightness'] = config['Title 0']['brightness']
         write_ws281x('brightness ' + str(ws281x['PWMchannel']) + ',' + \
              ws281x['Brightness'] + \
@@ -230,7 +231,8 @@ def main():
       elif config['Title 0']['sunset'] < currentDate :
         ''' if we have ran thru the sunset then change to Day Time Mode and get sunset dawn '''
         logger.info('Time to dim the LEDs')
-        _, config['Title 0']['sunset'] = getSunUPandSunDown(date.today() + timedelta(days = 1)) # get next sunset
+        config['Title 0']['dawn'], config['Title 0']['sunset'] = getSunUPandSunDown(date.today() + timedelta(days = 1)) # get next sunset
+        logger.log(logging.DEBUG-2, 'config["Title 0"] = ' + pp.pformat(config['Title 0']))
         ws281x['Brightness'] = config['Title 0']['nightbrightness']
         write_ws281x('brightness ' + str(ws281x['PWMchannel']) + ',' + \
              ws281x['Brightness'] + \
@@ -285,6 +287,7 @@ def getSunUPandSunDown(when = datetime.now()):
   try:
     g = geocoder.ip('me')
     logger.log(logging.DEBUG-3, 'Geolocation found = ' + pp.pformat(g.lat))
+    logger.log(logging.DEBUG-3, 'Geolocation found : lat=' + str(g.lat) + ' lng=' + str(g.lng))
     l = Location()
     l.latitude = g.lat
     l.longitude = g.lng
