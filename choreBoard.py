@@ -60,17 +60,24 @@ def cbf_button(GPIO, level, tick):
         '''  otherwise it was released '''
         buttonAction = 'ButtonReleases'
         color = colors[tasks[section]['currentColor']]
-        
-      tasks[section][buttonAction].append(currentDate)
-      tasks[section][buttonAction] = tasks[section][buttonAction][-4:] # truncate to only recent changes.
-      logger.log(logging.DEBUG-1, "tasks["+section+"]["+buttonAction+"] = " + str(tasks[section][buttonAction][-1]) )
-      logger.log(logging.DEBUG-4, "tasks["+section+"]["+buttonAction+"] = " + pp.pformat(tasks[section][buttonAction]) )
+          
+      logger.log(logging.DEBUG-1, "tasks["+section+"] button = "+buttonAction)
+      if tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingToLateDate'] :
+        ''' Only update if task is in time window '''
+        tasks[section][buttonAction].append(currentDate)
+        tasks[section][buttonAction] = tasks[section][buttonAction][-4:] # truncate to only recent changes.
+        if tasks[section].get('description'):
+          logger.log(logging.DEBUG-1, "tasks["+section+"]['description'] = " + tasks[section]['description'] )
+        logger.log(logging.DEBUG-1, "tasks["+section+"]["+buttonAction+"] = " + str(tasks[section][buttonAction][-1]) )
+        logger.log(logging.DEBUG-4, "tasks["+section+"]["+buttonAction+"] = " + pp.pformat(tasks[section][buttonAction]) )
 
-      write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
-                   color  + ',' + \
-                   str(tasks[section]['led_start']) + ',' + \
-                   str(int(tasks[section]['led_length'])) + \
-                   '\nrender\n')
+      if ((tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingToLateDate']) or (buttonAction == 'ButtonReleases')) :
+        ''' Only update if task is in time window or if restoring color to avoid timing hole of being left on.'''
+        write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
+                     color  + ',' + \
+                     str(tasks[section]['led_start']) + ',' + \
+                     str(int(tasks[section]['led_length'])) + \
+                     '\nrender\n')
 
 def getNextDeadLine(currentDate, section):
   PendingDueDate = currentDate + timedelta(seconds = section['crontab'].next(currentDate.timestamp())) # Crontab.next() returns remaining seconds.
@@ -260,15 +267,19 @@ def main():
           ''' determine new state if needed '''
           priorState = tasks[section]['state']
           if ((currentDate <= tasks[section]['PendingGraceDate']) and (tasks[section]['state'] != 'beforeGrace')):
+            ''' is it before the start of grace period, aka not yet expected to be started '''
             tasks[section]['state'] = 'beforeGrace'
           elif ((tasks[section]['PendingGraceDate'] < tasks[section]['ButtonReleases'][-1] <= tasks[section]['PendingToLateDate']) and (tasks[section]['state'] != 'completed')):
+            ''' is it between start of Grace and End of TO Late, aka is not completed '''
             tasks[section]['state'] = 'completed'
           elif ((tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingDueDate']) and not (tasks[section]['state'] in ['completed', 'pending'])) :
+            ''' is it between start of Grace and Expected Dead Line, aka was it completed On Time '''
             tasks[section]['state'] = 'pending'
           elif ((tasks[section]['PendingDueDate'] < currentDate <= tasks[section]['PendingToLateDate']) and not (tasks[section]['state'] in ['completed', 'late'])) :
+            ''' is it before Expected Dead Line, aka was it completed late '''
             tasks[section]['state'] = 'late'
           elif (tasks[section]['PendingToLateDate'] < currentDate) and tasks[section]['state'] != 'off':
-            ''' if after deadline and if not off then turn off and set new deadlines '''
+            ''' if after deadline and if not off then turn off and set new deadlines, aka is it just over '''
             tasks[section]['state'] = 'off'
             tasks[section]['PendingDueDate'], tasks[section]['PendingGraceDate'], tasks[section]['PendingToLateDate'] = getNextDeadLine(currentDate, tasks[section])
           else: 
