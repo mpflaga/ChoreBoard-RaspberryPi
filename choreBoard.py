@@ -62,7 +62,7 @@ def cbf_button(GPIO, level, tick):
         color = colors[tasks[section]['currentColor']]
           
       logger.log(logging.DEBUG-1, "tasks["+section+"] button = "+buttonAction)
-      if tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingToLateDate'] :
+      if (tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingToLateDate']) or args.lightbutton :
         ''' Only update if task is in time window '''
         tasks[section][buttonAction].append(currentDate)
         tasks[section][buttonAction] = tasks[section][buttonAction][-4:] # truncate to only recent changes.
@@ -71,7 +71,7 @@ def cbf_button(GPIO, level, tick):
         logger.log(logging.DEBUG-1, "tasks["+section+"]["+buttonAction+"] = " + str(tasks[section][buttonAction][-1]) )
         logger.log(logging.DEBUG-4, "tasks["+section+"]["+buttonAction+"] = " + pp.pformat(tasks[section][buttonAction]) )
 
-      if ((tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingToLateDate']) or (buttonAction == 'ButtonReleases')) :
+      if ((tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingToLateDate']) or (buttonAction == 'ButtonReleases') or args.lightbutton ) :
         ''' Only update if task is in time window or if restoring color to avoid timing hole of being left on.'''
         write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                      color  + ',' + \
@@ -381,6 +381,7 @@ def ParseArgs():
   parser.add_argument('--nightbrightness', '-n', help='same as brightness for after sunset')
   parser.add_argument('--timezone', '-z', help='specify local timezone, default is US/Eastern')
   parser.add_argument('--stop', '-s', action='store_true', help='just initialize and stop')
+  parser.add_argument('--lightbutton', '-u', action='store_true', help='illuminate buttons when pressed')
   parser.add_argument('--haltOnColor', '-a', help='specify [color], "rainbow" or "sticker" to pause on. Recommend having dim brightenss')
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup, in seconds', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
