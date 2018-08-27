@@ -348,8 +348,8 @@ def getSunUPandSunDown(when = datetime.now()):
     l.timezone = 'US/Eastern'
     dawn = l.sun(when)['dawn'].replace(tzinfo=None)
     sunset = l.sun(when)['sunset'].replace(tzinfo=None)
-    logger.log(logging.DEBUG-3, 'dawn = ' + pp.pformat(dawn))
-    logger.log(logging.DEBUG-3, 'sunset = ' + pp.pformat(sunset))
+    logger.log(logging.DEBUG-3, 'Todays dawn = ' + pp.pformat(dawn))
+    logger.log(logging.DEBUG-3, 'Todays sunset = ' + pp.pformat(sunset))
     return dawn, sunset
   except:
     return None, None
