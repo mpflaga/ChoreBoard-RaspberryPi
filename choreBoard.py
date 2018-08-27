@@ -4,7 +4,7 @@
 import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy, geocoder
 from crontab import CronTab
 from datetime import datetime, timedelta, date
-from time import time, sleep, localtime, mktime
+from time import time, sleep, localtime, mktime, strptime
 from astral import Location
 
 # Raspberry Pi specific libraries
@@ -83,10 +83,20 @@ def getNextDeadLine(currentDate, section):
   PendingDueDate = currentDate + timedelta(seconds = section['crontab'].next(currentDate.timestamp())) # Crontab.next() returns remaining seconds.
   logger.log(logging.DEBUG-2, 'New PendingDueDate = ' + PendingDueDate.strftime('%Y-%m-%d %a %H:%M:%S'))
 
-  PendingGraceDate = PendingDueDate - timedelta(seconds = int(section['grace'])) # Time to Start Yellow LEDs
+  if ':' in section['grace']:
+    x = strptime(section['grace'],'%H:%M:%S')
+    grace_sec = timedelta(hours=x.tm_hour,minutes=x.tm_min,seconds=x.tm_sec).total_seconds()
+  else:
+    grace_sec = int(section['grace'])
+  PendingGraceDate = PendingDueDate - timedelta(seconds = grace_sec) # Time to Start Yellow LEDs
   logger.log(logging.DEBUG-2, 'New PendingGraceDate = ' + PendingGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
   
-  PendingToLateDate = PendingDueDate + timedelta(seconds = int(section['persist'])) # delay until turn off LEDs
+  if ':' in section['persist']:
+    x = strptime(section['persist'],'%H:%M:%S')
+    persist_sec = timedelta(hours=x.tm_hour,minutes=x.tm_min,seconds=x.tm_sec).total_seconds()
+  else:
+    persist_sec = int(section['persist'])
+  PendingToLateDate = PendingDueDate + timedelta(seconds = persist_sec) # delay until turn off LEDs
   logger.log(logging.DEBUG-2, 'New PendingGraceDate = ' + PendingGraceDate.strftime('%Y-%m-%d %a %H:%M:%S'))
 
   return PendingDueDate, PendingGraceDate, PendingToLateDate
