@@ -156,7 +156,7 @@ def main():
                  )
 
     if 'gpio_pin' in config[section]:
-      if config[section]['gpio_pin'].isdigit():
+      if config[section]['gpio_pin'].isdigit() and ('deadline' in config[section]):
 
         ''' set glitch filter level either from last GPIO or Title or argument '''
         if 'glitch' in config[section].keys(): # if found in section
@@ -386,6 +386,7 @@ def ParseArgs():
   parser = argparse.ArgumentParser(description='Raspberry Pi MegaOperation board game.')
   parser.add_argument('--verbose', '-v', action='count', help='verbose multi level', default=1)
   parser.add_argument('--config', '-c', help='specify config file', default=(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn + ".ini")))
+  parser.add_argument('--io', help='specify pin and led file', default=(os.path.join(os.path.dirname(os.path.realpath(__file__)), fn + ".io")))
   parser.add_argument('--ws281x', '-w', help='specify ws281x file handle', default="/dev/ws281x")
   parser.add_argument('--brightness', '-b', help='specify intensity for ws281x 0-255 (off/full) after sunrise')
   parser.add_argument('--nightbrightness', '-n', help='same as brightness for after sunset')
@@ -401,12 +402,14 @@ def ParseArgs():
   args = parser.parse_args()
 
   os.path.join(os.path.dirname(os.path.realpath(__file__)), args.config)
-
+  os.path.join(os.path.dirname(os.path.realpath(__file__)), args.io)
 
   # Read in configuration file and create dictionary object
   configParse = configparser.ConfigParser()
   configParse.read(args.config)
-  config = {s:dict(configParse.items(s)) for s in configParse.sections()}
+  if os.path.exists(args.io): # read in IO pin defintions if in another file
+    configParse.read(args.io)
+  config = {s:dict(configParse.items(s)) for s in configParse.sections()} # convert object to dictionary.
 
   if args.brightness is not None:
     ws281x['Brightness'] = args.brightness
