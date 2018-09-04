@@ -46,7 +46,7 @@ tasks = None
 
 def cbf_button(GPIO, level, tick):
   global tasks
-  
+
   currentDate = datetime.now()
   logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', tick "' + str(tick) + ', currentDate = ' + str(currentDate))
   for section in tasks.keys():
@@ -189,18 +189,14 @@ def main():
     write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + colors[colorName] + '\nrender\n')
     sleep(args.postDelay)
 
-  config['Title 0']['currentColor'] = 'wht'
-  write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
-               colors[config['Title 0']['currentColor']]  + ',' + \
-               str(config['Title 0']['led_start']) + ',' + \
-               str(int(config['Title 0']['led_length'])) + \
-               '\nrender\n')
-  sleep(args.postDelay)
-  write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
-               colors['off']  + ',' + \
-               str(config['Title 0']['led_start']) + ',' + \
-               str(int(config['Title 0']['led_length'])) + \
-               '\nrender\n')
+  for colorName in ['wht', 'off']:
+    logger.debug("POST LED test of Title " + colorName)
+    write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
+                 colors[colorName]  + ',' + \
+                 str(config['Title 0']['led_start']) + ',' + \
+                 str(int(config['Title 0']['led_length'])) + \
+                 '\nrender\n')
+    sleep(args.postDelay)
 
   #### used to locate LEDs on device
   if args.walkLED:
@@ -324,7 +320,6 @@ def main():
                            str(tasks[section]['led_start']) + ',' + \
                            str(int(tasks[section]['led_length'])) + \
                            '\nrender\n')
-                           
       sleep(1)
 
   except KeyboardInterrupt:
