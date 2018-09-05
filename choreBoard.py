@@ -47,6 +47,8 @@ tasks = None
 def cbf_button(GPIO, level, tick):
   global tasks
 
+  logger.log(logging.DEBUG-2, 'config["Title 0"] = ' + pp.pformat(config['Title 0']))
+
   currentDate = datetime.now()
   logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', tick "' + str(tick) + ', currentDate = ' + str(currentDate))
   for section in tasks.keys():
@@ -137,6 +139,8 @@ def main():
   write_ws281x('brightness ' + str(ws281x['PWMchannel']) + ',' + \
      ws281x['Brightness'] + \
      '\nrender\n')
+     
+  config['Title 0']['currentColor'] = 'off'
   
   logger.log(logging.DEBUG-2, 'config["Title 0"] = ' + pp.pformat(config['Title 0']))
   
@@ -266,6 +270,8 @@ def main():
              ws281x['Brightness'] + \
              '\nrender\n')
       
+      config['Title 0']['listState'] = []
+      
       ''' Check for Button Changes '''
       for section in tasks.keys():
         if tasks[section]['gpio_pin'].isdigit():
@@ -320,6 +326,30 @@ def main():
                            str(tasks[section]['led_start']) + ',' + \
                            str(int(tasks[section]['led_length'])) + \
                            '\nrender\n')
+        
+        config['Title 0']['listState'].append(tasks[section]['state'])
+        if any(s in config['Title 0']['listState'] for s in ('pending', 'late')):
+          config['Title 0']['state'] = 'incomplete'
+        else:
+          if 'completed' in config['Title 0']['listState']:
+            config['Title 0']['state'] = 'complete'
+          else:
+            config['Title 0']['state'] = 'off'          
+        
+      priorTitleColor = config['Title 0']['currentColor']
+      if config['Title 0']['state'] == 'complete':
+        config['Title 0']['currentColor'] = 'grn'
+      else:
+        config['Title 0']['currentColor'] = 'off'
+
+      if priorTitleColor != config['Title 0']['currentColor']:
+        logger.log(logging.DEBUG-4, "config["+'Title 0'+"] = " + pp.pformat(config['Title 0']) )
+        write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
+                     colors[config['Title 0']['currentColor']]  + ',' + \
+                     str(config['Title 0']['led_start']) + ',' + \
+                     str(int(config['Title 0']['led_length'])) + \
+                     '\nrender\n')
+        
       sleep(1)
 
   except KeyboardInterrupt:
