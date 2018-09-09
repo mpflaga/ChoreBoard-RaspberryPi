@@ -151,6 +151,16 @@ def main():
       if maxTemp > ws281x['LedCount']:
         ws281x['LedCount'] = maxTemp
     
+
+    if 'deadline' in config[section]:
+      if ';' in config[section]['deadline']:
+        deadlineList = [x.strip() for x in config[section]['deadline'].split(';')]
+        logger.log(logging.DEBUG-2, section+"'s deadlineList = " + pp.pformat(deadlineList))
+
+        config[section]['grace'] = deadlineList[0]
+        config[section]['deadline'] = deadlineList[1]
+        config[section]['persist'] = deadlineList[2]
+
     logger.debug("section = " + section + \
                  ", led_start = " + config[section]['led_start'] if 'led_start' in config[section] else "" + \
                  ", gpio_pin = " + config[section]['gpio_pin'] if 'gpio_pin' in config[section] else "" + \
