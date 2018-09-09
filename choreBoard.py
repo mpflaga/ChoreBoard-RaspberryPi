@@ -184,8 +184,8 @@ def main():
         tasks[section]['crontab'] = CronTab(tasks[section]['deadline'])
         tasks[section]['PendingDueDate'], tasks[section]['PendingGraceDate'], tasks[section]['PendingToLateDate'] = getNextDeadLine(currentDate, tasks[section])
         tasks[section]['currentColor'] = 'off'
-        tasks[section]['ButtonReleases'] = [currentDate]
-        tasks[section]['ButtonPresses'] = [currentDate]
+        tasks[section]['ButtonReleases'] = [tasks[section]['PendingGraceDate'] - timedelta(seconds=1)]
+        tasks[section]['ButtonPresses'] = [tasks[section]['PendingGraceDate'] - timedelta(seconds=1)]
         tasks[section]['state'] = None
       
   logger.log(logging.DEBUG-4, "list of tasks = \r\n" + pp.pformat(list(tasks.keys())))
