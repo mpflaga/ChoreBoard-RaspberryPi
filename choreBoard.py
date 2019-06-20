@@ -54,25 +54,23 @@ def cbf_released(GPIO, level, tick):
     for section in tasks.keys():
       if int(tasks[section]['gpio_pin']) == GPIO:
           logger.debug('gpio_pin = ' + str(GPIO ) + ', level = ' + str(level ) + ', Section "' + section + '"')
-          logger.debug('CurrentDate/nextDeadlineDate(sec) = ' + str(mktime(tasks[section]['nextDeadlineDate'])) + "/" + str(currentEpochSeconds))
-          logger.debug('proposed nextTime = ' + str(tasks[section]['crontab'].next(datetime.fromtimestamp(currentEpochSeconds), default_utc=True) + currentEpochSeconds))
+          logger.debug('(nextDeadlineDate)EpochSeconds/currentEpochSeconds(sec) = ' + str(mktime(tasks[section]['nextDeadlineDate'])) + "/" + str(currentEpochSeconds))
 
           if currentEpochSeconds > mktime(tasks[section]['nextGraceDate']): # when in window of it being due.
             # task was completed, so calc next time deadlines and set green.
-            nextTime = tasks[section]['crontab'].next(datetime.fromtimestamp(currentEpochSeconds), default_utc=True) + currentEpochSeconds
-            tasks[section]['nextDeadlineDate'] = localtime(nextTime)
-            tasks[section]['nextGraceDate'] = localtime(nextTime - int(tasks[section]['grace']))
-            tasks[section]['currentColor'] = 'green'
-            
-          else:
-            # task was not completed or pending, so restore
-            newColor = colors[tasks[section]['currentColor']] # not completed return to what it was prior to pressed/white
+            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(mktime(tasks[section]['nextDeadlineDate'])+1, tasks[section])
+            tasks[section]['currentColor'] = 'grn'
 
           write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
                        colors[tasks[section]['currentColor']]  + ',' + \
                        str(tasks[section]['led_start']) + ',' + \
                        str(int(tasks[section]['led_length'])) + \
                        '\nrender\n')
+
+def getNextDeadLine(currentEpochSeconds, section):
+  nextDeadlineDate = section['crontab'].next(datetime.fromtimestamp(currentEpochSeconds), default_utc=True) + currentEpochSeconds
+  logger.debug('New nextDeadlineDate = ' + str(nextDeadlineDate))
+  return localtime(nextDeadlineDate), localtime(nextDeadlineDate - int(section['grace']))
 
 def main():
   global ws281x
@@ -106,11 +104,9 @@ def main():
       buttonPins.append(int(config[section]['gpio_pin']))
       tasks[section] = config[section]
       tasks[section]['crontab'] = CronTab(tasks[section]['deadline'])
-      nextTime = tasks[section]['crontab'].next(datetime.fromtimestamp(currentEpochSeconds), default_utc=True) + currentEpochSeconds
-      tasks[section]['nextDeadlineDate'] = localtime(nextTime)
-      tasks[section]['nextGraceDate'] = localtime(nextTime - int(tasks[section]['grace']))
+      tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentEpochSeconds, tasks[section])
       tasks[section]['currentColor'] = 'off'
-
+      
   logger.log(logging.DEBUG-4, "list of tasks = \r\n" + pp.pformat(list(tasks.keys())))
   logger.log(logging.DEBUG-5, "tasks = \r\n" + pp.pformat(tasks))
 
@@ -161,8 +157,27 @@ def main():
 
   #### Main Loop
   try:
-     while True:
-        sleep(60) # WIP/NEXT - MPF need to replace with Check if Task timed out either Yellow or Red.
+    while True:
+
+      currentEpochSeconds = round(time())
+      for section in tasks.keys():
+        if tasks[section]['gpio_pin'].isdigit():
+          priorColor = tasks[section]['currentColor']
+          if currentEpochSeconds > mktime(tasks[section]['nextDeadlineDate']) and (priorColor != 'grn' or priorColor == 'ylw'):
+            tasks[section]['currentColor'] = 'red'
+          elif currentEpochSeconds > mktime(tasks[section]['nextGraceDate']):
+            tasks[section]['currentColor'] = 'ylw'
+
+          if priorColor != tasks[section]['currentColor']:
+            tasks[section]['nextDeadlineDate'], tasks[section]['nextGraceDate'] = getNextDeadLine(currentEpochSeconds, tasks[section])
+            write_ws281x('fill ' + str(ws281x['PWMchannel']) + ',' + \
+                         colors[tasks[section]['currentColor']]  + ',' + \
+                         str(tasks[section]['led_start']) + ',' + \
+                         str(int(tasks[section]['led_length'])) + \
+                         '\nrender\n')
+
+      sleep(1)
+
   except KeyboardInterrupt:
      print("\nTidying up")
      for c in cb:
