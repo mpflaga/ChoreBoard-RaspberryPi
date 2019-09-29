@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # python standard libraries
-import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy, geocoder
+import __main__, sys, os, signal, pprint, configparser, argparse, logging, logging.handlers, time, random, copy, geocoder, tempfile
 from crontab import CronTab
 from datetime import datetime, timedelta, date
 from time import time, sleep, localtime, mktime, strptime
@@ -149,7 +149,8 @@ def main():
      
   config['Title 0']['currentColor'] = 'off'
   config['Title 0']['next allowed'] = currentDate
-
+  config['Title 0']['state'] = 'starting'
+  
   logger.log(logging.DEBUG-2, 'config["Title 0"] = ' + pp.pformat(config['Title 0']))
   
   currentDate = datetime.now()
@@ -351,15 +352,23 @@ def main():
                            '\nrender\n')
         
         config['Title 0']['listState'].append(tasks[section]['state'])
-        if any(s in config['Title 0']['listState'] for s in ('pending', 'late')):
-          config['Title 0']['state'] = 'incomplete'
+
+      priorTitle0State = config['Title 0']['state']
+      if any(s in config['Title 0']['listState'] for s in ('pending', 'late')):
+        config['Title 0']['state'] = 'incomplete'
+      else:
+        if 'completed' in config['Title 0']['listState']:
+          config['Title 0']['state'] = 'complete'
         else:
-          if 'completed' in config['Title 0']['listState']:
-            config['Title 0']['state'] = 'complete'
-          else:
-            config['Title 0']['state'] = 'off'          
-        
- 
+          config['Title 0']['state'] = 'off'          
+      
+      if args.statusFile is not None:
+        if priorTitle0State != config['Title 0']['state']:
+          logger.log(logging.DEBUG-1, "updating '" + args.statusFile + "' with " + config['Title 0']['state'] + "'")
+          status_file = open(args.statusFile, "w")
+          status_file.write(config['Title 0']['state'])
+          status_file.close()
+
       priorTitleColor = config['Title 0']['currentColor']
       if config['Title 0']['state'] == 'complete':
         config['Title 0']['currentColor'] = 'grn'
@@ -447,6 +456,7 @@ def ParseArgs():
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
   parser.add_argument('--glitch', '-g', help='debounce period in ms for GPIO', default=100)
   parser.add_argument('--buttonDelay', '-d', help='period before allowing another button', default=60)
+  parser.add_argument('--statusFile', '-f', help='file to store simple status message of either "off" or "complete"', default=(os.path.join(tempfile.gettempdir(), fn + ".status")))
 
   # Read in and parse the command line arguments
   args = parser.parse_args()
