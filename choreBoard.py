@@ -54,24 +54,31 @@ def cbf_button(GPIO, level, tick):
   for section in tasks.keys():
     if int(tasks[section]['gpio_pin']) == GPIO:
       ''' if GPIO is a defined task lets record the button change '''
-      if level == 0 :
-        ''' if button was pressed '''
+      if (level == 0) and (currentDate < config['Title 0']['next allowed']):
+        ''' if button was pressed & to early'''
+        buttonAction = 'ButtonPresses'
+        color = colors['purple']
+        logger.debug('currentDate of ' + currentDate.strftime('%Y-%m-%d %a %H:%M:%S') + ' is before next allowed date of ' + config['Title 0']['next allowed'].strftime('%Y-%m-%d %a %H:%M:%S'))
+      elif (level == 0):
+        ''' if button was pressed & after delay '''
         buttonAction = 'ButtonPresses'
         color = colors['wht']
       else:
-        '''  otherwise it was released '''
+        ''' otherwise it was released '''
         buttonAction = 'ButtonReleases'
         color = colors[tasks[section]['currentColor']]
-          
-      logger.log(logging.DEBUG-1, "tasks["+section+"] button = "+buttonAction)
-      if (tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingToLateDate']) or args.lightbutton :
-        ''' Only update if task is in time window '''
-        tasks[section][buttonAction].append(currentDate)
-        tasks[section][buttonAction] = tasks[section][buttonAction][-4:] # truncate to only recent changes.
-        if tasks[section].get('description'):
-          logger.log(logging.DEBUG-1, "tasks["+section+"]['description'] = " + tasks[section]['description'] )
-        logger.log(logging.DEBUG-1, "tasks["+section+"]["+buttonAction+"] = " + str(tasks[section][buttonAction][-1]) )
-        logger.log(logging.DEBUG-4, "tasks["+section+"]["+buttonAction+"] = " + pp.pformat(tasks[section][buttonAction]) )
+      
+      if currentDate >= config['Title 0']['next allowed']:
+        ''' update is not blocked by button delay '''
+        logger.log(logging.DEBUG-1, "tasks[" + section + "] button = " + buttonAction)
+        if (tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingToLateDate']) or args.lightbutton :
+          ''' Only update if task is in time window '''
+          tasks[section][buttonAction].append(currentDate)
+          tasks[section][buttonAction] = tasks[section][buttonAction][-4:] # truncate to only recent changes.
+          if tasks[section].get('description'):
+            logger.log(logging.DEBUG-1, "tasks[" + section + "]['description'] = " + tasks[section]['description'] )
+          logger.log(logging.DEBUG-1, "tasks[" + section + "][" + buttonAction + "] = " + str(tasks[section][buttonAction][-1]) )
+          logger.log(logging.DEBUG-4, "tasks[" + section + "][" + buttonAction + "] = " + pp.pformat(tasks[section][buttonAction]) )
 
       if ((tasks[section]['PendingGraceDate'] < currentDate <= tasks[section]['PendingToLateDate']) or (buttonAction == 'ButtonReleases') or args.lightbutton ) :
         ''' Only update if task is in time window or if restoring color to avoid timing hole of being left on.'''
@@ -141,7 +148,8 @@ def main():
      '\nrender\n')
      
   config['Title 0']['currentColor'] = 'off'
-  
+  config['Title 0']['next allowed'] = currentDate
+
   logger.log(logging.DEBUG-2, 'config["Title 0"] = ' + pp.pformat(config['Title 0']))
   
   currentDate = datetime.now()
@@ -311,6 +319,11 @@ def main():
           ''' log state change and determine new deadlines if needed '''
           if priorState != tasks[section]['state']:
             logger.debug('tasks[' + section + '] Changing state from ' + str(priorState) + ' to ' + tasks[section]['state'])
+            if tasks[section]['state'] == 'completed':
+                newNextAllowedDate = currentDate + timedelta(seconds = args.buttonDelay)
+                if newNextAllowedDate > config['Title 0']['next allowed']:
+                    config['Title 0']['next allowed'] = newNextAllowedDate
+                    logger.debug(' next allowed button is after ' + config['Title 0']['next allowed'].strftime('%Y-%m-%d %a %H:%M:%S'))
 
           ''' check if button is not being depressed '''
           if (pi.read(int(tasks[section]['gpio_pin'])) != 0) :
@@ -346,6 +359,7 @@ def main():
           else:
             config['Title 0']['state'] = 'off'          
         
+ 
       priorTitleColor = config['Title 0']['currentColor']
       if config['Title 0']['state'] == 'complete':
         config['Title 0']['currentColor'] = 'grn'
@@ -432,6 +446,7 @@ def ParseArgs():
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup, in seconds', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
   parser.add_argument('--glitch', '-g', help='debounce period in ms for GPIO', default=100)
+  parser.add_argument('--buttonDelay', '-d', help='period before allowing another button', default=60)
 
   # Read in and parse the command line arguments
   args = parser.parse_args()
