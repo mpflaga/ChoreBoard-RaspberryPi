@@ -432,6 +432,12 @@ def walk_leds():
     pos = pos + 1
   exit()
 
+def checkNotNegative(value):
+    ivalue = int(value)
+    if ivalue < 0:
+        raise argparse.ArgumentTypeError("%s is an invalid positive int value" % value)
+    return ivalue
+    
 def ParseArgs():
   global args
   global config
@@ -455,7 +461,7 @@ def ParseArgs():
   parser.add_argument('--postDelay', '-p', help='specify the LED delays at startup, in seconds', type=float, default="0.25")
   parser.add_argument('--walkLED', '-L', action='store_true', help='move LED increamentally, with standard input, used for determining LED positions.')
   parser.add_argument('--glitch', '-g', help='debounce period in ms for GPIO', default=100)
-  parser.add_argument('--buttonDelay', '-d', help='period before allowing another button', default=60)
+  parser.add_argument('--buttonDelay', '-d', help='period before allowing another button', type=checkNotNegative, default=60)
   parser.add_argument('--statusFile', '-f', help='file to store simple status message of either "off" or "complete"', default=(os.path.join(tempfile.gettempdir(), fn + ".status")))
 
   # Read in and parse the command line arguments
